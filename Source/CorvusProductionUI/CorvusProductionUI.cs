@@ -3,6 +3,7 @@ using UnityEngine;
 using Verse;
 using System.Collections.Generic;
 using System.Linq;
+using System;
 
 namespace CorvusProductionUI
 {
@@ -198,8 +199,7 @@ namespace CorvusProductionUI
         };
 
         private List<string> availableMods = new List<string>();
-        private Dictionary<RecipeInfo, int> billCounts = new Dictionary<RecipeInfo, int>();
-        private Dictionary<RecipeInfo, CustomRepeatMode> repeatModes = new Dictionary<RecipeInfo, CustomRepeatMode>();
+        private Vector2 billScrollPosition;
 
         public ProductionWindow()
         {
@@ -376,22 +376,34 @@ namespace CorvusProductionUI
                 FilterRecipes();
             }
 
-            // Recipe list
-            var listRect = new Rect(rect.x, filterY + filterHeight + 10f, rect.width, 
-                rect.height - (filterY + filterHeight + 20f));
+            // Split the remaining area 60/40
+            var remainingHeight = rect.height - (filterY + filterHeight + 20f);
+            var remainingY = filterY + filterHeight + 10f;
             
-            DrawRecipeList(listRect);
+            // Recipe list (left 60%)
+            var recipeListRect = new Rect(rect.x, remainingY, rect.width * 0.6f - 5f, remainingHeight);
+            DrawRecipeList(recipeListRect);
+            
+            // Bill list (right 40%)
+            var billListRect = new Rect(rect.x + rect.width * 0.6f + 5f, remainingY, rect.width * 0.4f - 5f, remainingHeight);
+            DrawBillList(billListRect);
         }
 
         private void DrawRecipeList(Rect rect)
         {
             Text.Font = GameFont.Small;
             
-            var itemHeight = 85f; // Increased height for two-line layout
-            var contentHeight = filteredRecipes.Count * itemHeight;
-            var viewRect = new Rect(0f, 0f, rect.width - 20f, contentHeight);
+            // Header
+            var headerRect = new Rect(rect.x, rect.y, rect.width, 25f);
+            Widgets.Label(headerRect, "Recipes");
             
-            Widgets.BeginScrollView(rect, ref scrollPosition, viewRect);
+            // List area
+            var listRect = new Rect(rect.x, rect.y + 30f, rect.width, rect.height - 30f);
+            var itemHeight = 65f; // Simpler layout, less height needed
+            var contentHeight = filteredRecipes.Count * itemHeight;
+            var viewRect = new Rect(0f, 0f, listRect.width - 20f, contentHeight);
+            
+            Widgets.BeginScrollView(listRect, ref scrollPosition, viewRect);
             
             var curY = 0f;
             foreach (var recipeInfo in filteredRecipes)
@@ -416,43 +428,23 @@ namespace CorvusProductionUI
             var recipe = recipeInfo.recipe;
             var innerRect = rect.ContractedBy(5f);
             
-            // First line: Recipe info
-            var firstLineY = innerRect.y;
-            
             // Recipe name
-            var nameRect = new Rect(innerRect.x, firstLineY, innerRect.width * 0.3f, 20f);
+            var nameRect = new Rect(innerRect.x, innerRect.y, innerRect.width * 0.4f, 20f);
             Widgets.Label(nameRect, recipe.label.CapitalizeFirst());
             
             // Category
-            var categoryRect = new Rect(nameRect.xMax + 5f, firstLineY, 80f, 20f);
+            var categoryRect = new Rect(nameRect.xMax + 5f, innerRect.y, 80f, 20f);
             Widgets.Label(categoryRect, recipeInfo.category);
             
             // Workbench
-            var workbenchRect = new Rect(categoryRect.xMax + 5f, firstLineY, 120f, 20f);
+            var workbenchRect = new Rect(innerRect.x, innerRect.y + 22f, innerRect.width * 0.5f, 20f);
             var workbenchText = recipeInfo.workbenchDef?.label ?? "Unknown";
             GUI.color = recipeInfo.hasWorkbench ? Color.green : Color.red;
             Widgets.Label(workbenchRect, workbenchText);
             GUI.color = Color.white;
             
-            // Materials
-            var materialsText = "Materials: ";
-            if (recipe.ingredients?.Any() == true)
-            {
-                materialsText += string.Join(", ", recipe.ingredients.Select(ing => 
-                    $"{ing.filter.Summary} x{ing.GetBaseCount()}"));
-            }
-            else
-            {
-                materialsText += "None";
-            }
-            
-            var materialsRect = new Rect(innerRect.x, firstLineY + 22f, innerRect.width, 20f);
-            GUI.color = recipeInfo.hasMaterials ? Color.green : Color.red;
-            Widgets.Label(materialsRect, materialsText);
-            GUI.color = Color.white;
-            
-            // Second line: Bill controls
-            var secondLineY = innerRect.y + 45f;
+            // Add Bill button
+            var addBillRect = new Rect(innerRect.xMax - 80f, innerRect.y + 10f, 75f, 30f);
             var canCreateBill = recipeInfo.CanCreateBill();
             
             if (!canCreateBill)
@@ -460,85 +452,265 @@ namespace CorvusProductionUI
                 GUI.color = Color.gray;
             }
             
-            // Get current bill count and repeat mode for this recipe
-            if (!billCounts.ContainsKey(recipeInfo))
-            {
-                billCounts[recipeInfo] = 1;
-            }
-            if (!repeatModes.ContainsKey(recipeInfo))
-            {
-                repeatModes[recipeInfo] = CustomRepeatMode.DoXTimes;
-            }
-            var currentCount = billCounts[recipeInfo];
-            var currentRepeatMode = repeatModes[recipeInfo];
-            
-            // Minus button
-            var minusRect = new Rect(innerRect.x + 20f, secondLineY, 25f, 25f);
-            if (Widgets.ButtonText(minusRect, "-") && canCreateBill && currentCount > 1)
-            {
-                billCounts[recipeInfo] = currentCount - 1;
-            }
-            
-            // Count text field (disabled for Do Forever mode)
-            var countRect = new Rect(minusRect.xMax + 5f, secondLineY, 60f, 25f);
-            if (currentRepeatMode == CustomRepeatMode.DoForever)
-            {
-                GUI.color = Color.gray;
-                Widgets.Label(countRect, "∞");
-                GUI.color = canCreateBill ? Color.white : Color.gray;
-            }
-            else
-            {
-                var countString = currentCount.ToString();
-                var newCountString = Widgets.TextField(countRect, countString);
-                if (int.TryParse(newCountString, out int newCount) && newCount > 0)
-                {
-                    billCounts[recipeInfo] = newCount;
-                }
-            }
-            
-            // Plus button
-            var plusRect = new Rect(countRect.xMax + 5f, secondLineY, 25f, 25f);
-            if (Widgets.ButtonText(plusRect, "+") && canCreateBill && currentRepeatMode != CustomRepeatMode.DoForever)
-            {
-                billCounts[recipeInfo] = currentCount + 1;
-            }
-            
-            // Repeat mode dropdown
-            var repeatModeRect = new Rect(plusRect.xMax + 10f, secondLineY, 50f, 25f);
-            var displayText = GetRepeatModeDisplayText(currentRepeatMode, currentCount);
-            if (Widgets.ButtonText(repeatModeRect, displayText) && canCreateBill)
-            {
-                var options = new List<FloatMenuOption>();
-                foreach (CustomRepeatMode mode in System.Enum.GetValues(typeof(CustomRepeatMode)))
-                {
-                    options.Add(new FloatMenuOption(GetRepeatModeMenuText(mode), () => 
-                    { 
-                        repeatModes[recipeInfo] = mode; 
-                    }));
-                }
-                Find.WindowStack.Add(new FloatMenu(options));
-            }
-            
-            // Add Bill button
-            var addBillRect = new Rect(repeatModeRect.xMax + 10f, secondLineY, 80f, 25f);
             if (Widgets.ButtonText(addBillRect, "Add Bill") && canCreateBill)
             {
-                recipeInfo.CreateBill(billCounts[recipeInfo], currentRepeatMode);
-                string modeText = currentRepeatMode == CustomRepeatMode.DoForever ? "forever" : 
-                                 currentRepeatMode == CustomRepeatMode.DoUntilX ? $"until {currentCount}" : 
-                                 $"{currentCount} times";
-                Messages.Message($"Added bill: {recipe.label} ({modeText})", MessageTypeDefOf.PositiveEvent);
-            }
-            
-            // Details button (placeholder)
-            var detailsRect = new Rect(addBillRect.xMax + 10f, secondLineY, 80f, 25f);
-            if (Widgets.ButtonText(detailsRect, "Details..."))
-            {
-                // Placeholder - no functionality yet
+                recipeInfo.CreateBill(1, CustomRepeatMode.DoXTimes);
+                Messages.Message($"Added bill: {recipe.label}", MessageTypeDefOf.PositiveEvent);
             }
             
             GUI.color = Color.white;
+        }
+
+        private void DrawBillList(Rect rect)
+        {
+            Text.Font = GameFont.Small;
+            
+            // Header
+            var headerRect = new Rect(rect.x, rect.y, rect.width, 25f);
+            Widgets.Label(headerRect, "Bills");
+            
+            // Get relevant bills
+            var relevantBills = GetRelevantBills();
+            
+            // List area
+            var listRect = new Rect(rect.x, rect.y + 30f, rect.width, rect.height - 30f);
+            
+            if (relevantBills.Count == 0)
+            {
+                var noBillsRect = new Rect(listRect.x + 10f, listRect.y + 10f, listRect.width - 20f, 30f);
+                GUI.color = Color.gray;
+                Widgets.Label(noBillsRect, "No bills found");
+                GUI.color = Color.white;
+                return;
+            }
+            
+            var itemHeight = 85f;
+            var contentHeight = relevantBills.Count * itemHeight;
+            var viewRect = new Rect(0f, 0f, listRect.width - 20f, contentHeight);
+            
+            Widgets.BeginScrollView(listRect, ref billScrollPosition, viewRect);
+            
+            var curY = 0f;
+            foreach (var billInfo in relevantBills)
+            {
+                var itemRect = new Rect(0f, curY, viewRect.width, itemHeight - 5f);
+                DrawBillItem(itemRect, billInfo);
+                curY += itemHeight;
+            }
+            
+            Widgets.EndScrollView();
+        }
+
+        private List<BillInfo> GetRelevantBills()
+        {
+            var relevantBills = new List<BillInfo>();
+            
+            if (Find.CurrentMap?.listerThings == null) return relevantBills;
+            
+            // Get all workbenches that can make the currently filtered recipes
+            var relevantWorkbenches = new HashSet<Thing>();
+            foreach (var recipeInfo in filteredRecipes)
+            {
+                if (recipeInfo.workbenchDef != null)
+                {
+                    var workbenches = Find.CurrentMap.listerThings.ThingsOfDef(recipeInfo.workbenchDef);
+                    foreach (var workbench in workbenches)
+                    {
+                        relevantWorkbenches.Add(workbench);
+                    }
+                }
+            }
+            
+            // Get bills from relevant workbenches, interleaved by position
+            var workbenchBills = new Dictionary<Thing, List<Bill>>();
+            int maxBillCount = 0;
+            
+            foreach (var workbench in relevantWorkbenches)
+            {
+                if (workbench is IBillGiver billGiver)
+                {
+                    var bills = billGiver.BillStack.Bills
+                        .Where(b => filteredRecipes.Any(r => r.recipe == b.recipe))
+                        .ToList();
+                    workbenchBills[workbench] = bills;
+                    maxBillCount = Math.Max(maxBillCount, bills.Count);
+                }
+            }
+            
+            // Interleave bills by position
+            for (int i = 0; i < maxBillCount; i++)
+            {
+                foreach (var kvp in workbenchBills)
+                {
+                    if (i < kvp.Value.Count)
+                    {
+                        relevantBills.Add(new BillInfo(kvp.Value[i], kvp.Key));
+                    }
+                }
+            }
+            
+            return relevantBills;
+        }
+
+        private void DrawBillItem(Rect rect, BillInfo billInfo)
+        {
+            // Background
+            if (Mouse.IsOver(rect))
+            {
+                Widgets.DrawHighlight(rect);
+            }
+            Widgets.DrawBox(rect);
+
+            var bill = billInfo.bill;
+            var workbench = billInfo.workbench;
+            var innerRect = rect.ContractedBy(5f);
+            
+            // Bill name and workbench info
+            var nameRect = new Rect(innerRect.x, innerRect.y, innerRect.width * 0.6f, 20f);
+            Widgets.Label(nameRect, bill.LabelCap);
+            
+            var workbenchRect = new Rect(innerRect.x, innerRect.y + 22f, innerRect.width * 0.6f, 20f);
+            GUI.color = Color.gray;
+            Widgets.Label(workbenchRect, $"@ {workbench.Label}");
+            GUI.color = Color.white;
+            
+            // Bill controls (right side)
+            var controlsY = innerRect.y + 45f;
+            
+            // Minus button
+            var minusRect = new Rect(innerRect.x + 10f, controlsY, 25f, 25f);
+            if (Widgets.ButtonText(minusRect, "-"))
+            {
+                ModifyBillCount(bill, -1);
+            }
+            
+            // Count display/edit
+            var countRect = new Rect(minusRect.xMax + 5f, controlsY, 50f, 25f);
+            string countText = GetBillCountText(bill);
+            var newCountText = Widgets.TextField(countRect, countText);
+            if (newCountText != countText && int.TryParse(newCountText, out int newCount) && newCount > 0)
+            {
+                SetBillCount(bill, newCount);
+            }
+            
+            // Plus button
+            var plusRect = new Rect(countRect.xMax + 5f, controlsY, 25f, 25f);
+            if (Widgets.ButtonText(plusRect, "+"))
+            {
+                ModifyBillCount(bill, 1);
+            }
+            
+            // Repeat mode button
+            var modeRect = new Rect(plusRect.xMax + 10f, controlsY, 50f, 25f);
+            var modeText = GetBillModeText(bill);
+            if (Widgets.ButtonText(modeRect, modeText))
+            {
+                ShowBillModeMenu(bill);
+            }
+            
+            // Details button
+            var detailsRect = new Rect(modeRect.xMax + 10f, controlsY, 60f, 25f);
+            if (Widgets.ButtonText(detailsRect, "Details"))
+            {
+                if (bill is Bill_Production productionBill)
+                {
+                    Find.WindowStack.Add(new Dialog_BillConfig(productionBill, workbench.Position));
+                }
+            }
+            
+            // Delete button (trash icon)
+            var deleteRect = new Rect(innerRect.xMax - 25f, innerRect.y + 5f, 20f, 20f);
+            if (Widgets.ButtonImage(deleteRect, TexButton.Delete))
+            {
+                if (workbench is IBillGiver billGiver)
+                {
+                    billGiver.BillStack.Delete(bill);
+                    Messages.Message($"Deleted bill: {bill.LabelCap}", MessageTypeDefOf.NeutralEvent);
+                }
+            }
+        }
+
+        private string GetBillCountText(Bill bill)
+        {
+            if (!(bill is Bill_Production productionBill)) return "1";
+            
+            if (productionBill.repeatMode == BillRepeatModeDefOf.Forever) return "∞";
+            if (productionBill.repeatMode == BillRepeatModeDefOf.RepeatCount) return productionBill.repeatCount.ToString();
+            if (productionBill.repeatMode == BillRepeatModeDefOf.TargetCount) return productionBill.targetCount.ToString();
+            return "1";
+        }
+
+        private string GetBillModeText(Bill bill)
+        {
+            if (!(bill is Bill_Production productionBill)) return "x1";
+            
+            if (productionBill.repeatMode == BillRepeatModeDefOf.Forever) return "∞";
+            if (productionBill.repeatMode == BillRepeatModeDefOf.RepeatCount) return $"x{productionBill.repeatCount}";
+            if (productionBill.repeatMode == BillRepeatModeDefOf.TargetCount) return $"≤{productionBill.targetCount}";
+            return "x1";
+        }
+
+        private void ModifyBillCount(Bill bill, int delta)
+        {
+            if (!(bill is Bill_Production productionBill)) return;
+            if (productionBill.repeatMode == BillRepeatModeDefOf.Forever) return;
+            
+            if (productionBill.repeatMode == BillRepeatModeDefOf.RepeatCount)
+            {
+                productionBill.repeatCount = Math.Max(1, productionBill.repeatCount + delta);
+            }
+            else if (productionBill.repeatMode == BillRepeatModeDefOf.TargetCount)
+            {
+                productionBill.targetCount = Math.Max(1, productionBill.targetCount + delta);
+            }
+        }
+
+        private void SetBillCount(Bill bill, int count)
+        {
+            if (!(bill is Bill_Production productionBill)) return;
+            if (productionBill.repeatMode == BillRepeatModeDefOf.Forever) return;
+            
+            if (productionBill.repeatMode == BillRepeatModeDefOf.RepeatCount)
+            {
+                productionBill.repeatCount = count;
+            }
+            else if (productionBill.repeatMode == BillRepeatModeDefOf.TargetCount)
+            {
+                productionBill.targetCount = count;
+            }
+        }
+
+        private void ShowBillModeMenu(Bill bill)
+        {
+            if (!(bill is Bill_Production productionBill)) return;
+            
+            var options = new List<FloatMenuOption>
+            {
+                new FloatMenuOption("Do X times", () => {
+                    productionBill.repeatMode = BillRepeatModeDefOf.RepeatCount;
+                    if (productionBill.repeatCount <= 0) productionBill.repeatCount = 1;
+                }),
+                new FloatMenuOption("Do until you have X", () => {
+                    productionBill.repeatMode = BillRepeatModeDefOf.TargetCount;
+                    if (productionBill.targetCount <= 0) productionBill.targetCount = 1;
+                }),
+                new FloatMenuOption("Do forever", () => {
+                    productionBill.repeatMode = BillRepeatModeDefOf.Forever;
+                })
+            };
+            Find.WindowStack.Add(new FloatMenu(options));
+        }
+    }
+
+    public class BillInfo
+    {
+        public Bill bill;
+        public Thing workbench;
+
+        public BillInfo(Bill bill, Thing workbench)
+        {
+            this.bill = bill;
+            this.workbench = workbench;
         }
     }
 } 
