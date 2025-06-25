@@ -28,6 +28,13 @@ namespace CorvusProductionUI
         NoWorkbench
     }
 
+    public enum CustomRepeatMode
+    {
+        DoXTimes,
+        DoUntilX,
+        DoForever
+    }
+
     public class RecipeInfo
     {
         public RecipeDef recipe;
@@ -148,15 +155,28 @@ namespace CorvusProductionUI
             return GetBestWorkbench() != null;
         }
 
-        public void CreateBill(int count = 1)
+        public void CreateBill(int count = 1, CustomRepeatMode repeatMode = CustomRepeatMode.DoXTimes)
         {
             var workbench = GetBestWorkbench();
             if (workbench == null || !(workbench is IBillGiver billGiver)) return;
             
             var bill = new Bill_Production(recipe);
             bill.SetStoreMode(BillStoreModeDefOf.BestStockpile);
-            bill.repeatMode = BillRepeatModeDefOf.RepeatCount;
-            bill.repeatCount = count;
+            
+            switch (repeatMode)
+            {
+                case CustomRepeatMode.DoXTimes:
+                    bill.repeatMode = BillRepeatModeDefOf.RepeatCount;
+                    bill.repeatCount = count;
+                    break;
+                case CustomRepeatMode.DoUntilX:
+                    bill.repeatMode = BillRepeatModeDefOf.TargetCount;
+                    bill.targetCount = count;
+                    break;
+                case CustomRepeatMode.DoForever:
+                    bill.repeatMode = BillRepeatModeDefOf.Forever;
+                    break;
+            }
             
             billGiver.BillStack.AddBill(bill);
         }
@@ -179,6 +199,7 @@ namespace CorvusProductionUI
 
         private List<string> availableMods = new List<string>();
         private Dictionary<RecipeInfo, int> billCounts = new Dictionary<RecipeInfo, int>();
+        private Dictionary<RecipeInfo, CustomRepeatMode> repeatModes = new Dictionary<RecipeInfo, CustomRepeatMode>();
 
         public ProductionWindow()
         {
@@ -266,6 +287,36 @@ namespace CorvusProductionUI
                     return "No Workbench";
                 default:
                     return filter.ToString();
+            }
+        }
+
+        private string GetRepeatModeDisplayText(CustomRepeatMode mode, int count)
+        {
+            switch (mode)
+            {
+                case CustomRepeatMode.DoXTimes:
+                    return $"x{count}";
+                case CustomRepeatMode.DoUntilX:
+                    return $"≤{count}";
+                case CustomRepeatMode.DoForever:
+                    return "∞";
+                default:
+                    return $"x{count}";
+            }
+        }
+
+        private string GetRepeatModeMenuText(CustomRepeatMode mode)
+        {
+            switch (mode)
+            {
+                case CustomRepeatMode.DoXTimes:
+                    return "Do X times";
+                case CustomRepeatMode.DoUntilX:
+                    return "Do until you have X";
+                case CustomRepeatMode.DoForever:
+                    return "Do forever";
+                default:
+                    return "Do X times";
             }
         }
 
@@ -409,12 +460,17 @@ namespace CorvusProductionUI
                 GUI.color = Color.gray;
             }
             
-            // Get current bill count for this recipe
+            // Get current bill count and repeat mode for this recipe
             if (!billCounts.ContainsKey(recipeInfo))
             {
                 billCounts[recipeInfo] = 1;
             }
+            if (!repeatModes.ContainsKey(recipeInfo))
+            {
+                repeatModes[recipeInfo] = CustomRepeatMode.DoXTimes;
+            }
             var currentCount = billCounts[recipeInfo];
+            var currentRepeatMode = repeatModes[recipeInfo];
             
             // Minus button
             var minusRect = new Rect(innerRect.x + 20f, secondLineY, 25f, 25f);
@@ -423,28 +479,56 @@ namespace CorvusProductionUI
                 billCounts[recipeInfo] = currentCount - 1;
             }
             
-            // Count text field
+            // Count text field (disabled for Do Forever mode)
             var countRect = new Rect(minusRect.xMax + 5f, secondLineY, 60f, 25f);
-            var countString = currentCount.ToString();
-            var newCountString = Widgets.TextField(countRect, countString);
-            if (int.TryParse(newCountString, out int newCount) && newCount > 0)
+            if (currentRepeatMode == CustomRepeatMode.DoForever)
             {
-                billCounts[recipeInfo] = newCount;
+                GUI.color = Color.gray;
+                Widgets.Label(countRect, "∞");
+                GUI.color = canCreateBill ? Color.white : Color.gray;
+            }
+            else
+            {
+                var countString = currentCount.ToString();
+                var newCountString = Widgets.TextField(countRect, countString);
+                if (int.TryParse(newCountString, out int newCount) && newCount > 0)
+                {
+                    billCounts[recipeInfo] = newCount;
+                }
             }
             
             // Plus button
             var plusRect = new Rect(countRect.xMax + 5f, secondLineY, 25f, 25f);
-            if (Widgets.ButtonText(plusRect, "+") && canCreateBill)
+            if (Widgets.ButtonText(plusRect, "+") && canCreateBill && currentRepeatMode != CustomRepeatMode.DoForever)
             {
                 billCounts[recipeInfo] = currentCount + 1;
             }
             
+            // Repeat mode dropdown
+            var repeatModeRect = new Rect(plusRect.xMax + 10f, secondLineY, 50f, 25f);
+            var displayText = GetRepeatModeDisplayText(currentRepeatMode, currentCount);
+            if (Widgets.ButtonText(repeatModeRect, displayText) && canCreateBill)
+            {
+                var options = new List<FloatMenuOption>();
+                foreach (CustomRepeatMode mode in System.Enum.GetValues(typeof(CustomRepeatMode)))
+                {
+                    options.Add(new FloatMenuOption(GetRepeatModeMenuText(mode), () => 
+                    { 
+                        repeatModes[recipeInfo] = mode; 
+                    }));
+                }
+                Find.WindowStack.Add(new FloatMenu(options));
+            }
+            
             // Add Bill button
-            var addBillRect = new Rect(plusRect.xMax + 10f, secondLineY, 80f, 25f);
+            var addBillRect = new Rect(repeatModeRect.xMax + 10f, secondLineY, 80f, 25f);
             if (Widgets.ButtonText(addBillRect, "Add Bill") && canCreateBill)
             {
-                recipeInfo.CreateBill(billCounts[recipeInfo]);
-                Messages.Message($"Added bill: {recipe.label} x{billCounts[recipeInfo]}", MessageTypeDefOf.PositiveEvent);
+                recipeInfo.CreateBill(billCounts[recipeInfo], currentRepeatMode);
+                string modeText = currentRepeatMode == CustomRepeatMode.DoForever ? "forever" : 
+                                 currentRepeatMode == CustomRepeatMode.DoUntilX ? $"until {currentCount}" : 
+                                 $"{currentCount} times";
+                Messages.Message($"Added bill: {recipe.label} ({modeText})", MessageTypeDefOf.PositiveEvent);
             }
             
             // Details button (placeholder)
