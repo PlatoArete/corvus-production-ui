@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+    <name>[COG] Corvus Production UI</name>
+    <author>PlatoArete</author>
+    <supportedVersions>
+        <li>1.5</li>
+    </supportedVersions>
+    <packageId>Corvus.ProductionUI</packageId>
+    <description>Adds a production management interface to RimWorld.</description>
+</ModMetaData> 

@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "3WAbDx6W3J9D/0UbEYPFvdyXYTDMdjO3GT2cE/A/vN/bwQkneFvit2qusDBR0ezh7hH93Rlk8lJmGO8Dxr0ijA==",
+  "success": true,
+  "projectFilePath": "C:\\Users\\andre\\Local Repos\\corvus-production-ui\\Source\\CorvusProductionUI\\CorvusProductionUI.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\andre\\.nuget\\packages\\microsoft.netframework.referenceassemblies\\1.0.3\\microsoft.netframework.referenceassemblies.1.0.3.nupkg.sha512",
+    "C:\\Users\\andre\\.nuget\\packages\\microsoft.netframework.referenceassemblies.net472\\1.0.3\\microsoft.netframework.referenceassemblies.net472.1.0.3.nupkg.sha512"
+  ],
+  "logs": []
+}

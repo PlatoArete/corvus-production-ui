@@ -1,0 +1,8 @@
+C:\Users\andre\Local Repos\corvus-production-ui\Source\CorvusProductionUI\obj\Debug\CorvusProductionUI.csproj.AssemblyReference.cache
+C:\Users\andre\Local Repos\corvus-production-ui\Source\CorvusProductionUI\obj\Debug\CorvusProductionUI.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\andre\Local Repos\corvus-production-ui\Source\CorvusProductionUI\obj\Debug\CorvusProductionUI.csproj.CoreCompileInputs.cache
+C:\Users\andre\Local Repos\corvus-production-ui\Source\CorvusProductionUI\obj\Debug\CorvusProductionUI.sourcelink.json
+C:\Users\andre\Local Repos\corvus-production-ui\Assemblies\CorvusProductionUI.dll
+C:\Users\andre\Local Repos\corvus-production-ui\Assemblies\CorvusProductionUI.pdb
+C:\Users\andre\Local Repos\corvus-production-ui\Source\CorvusProductionUI\obj\Debug\CorvusProductionUI.dll
+C:\Users\andre\Local Repos\corvus-production-ui\Source\CorvusProductionUI\obj\Debug\CorvusProductionUI.pdb
