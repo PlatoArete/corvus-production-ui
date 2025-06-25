@@ -60,7 +60,12 @@ namespace CorvusProductionUI
             if (recipe.products?.Any() == true)
             {
                 var product = recipe.products.First().thingDef;
-                if (product.IsWeapon) return "Weapons";
+                if (product.IsWeapon) 
+                {
+                    // Distinguish between ranged and melee weapons
+                    if (product.IsRangedWeapon) return "Ranged Weapons";
+                    else return "Melee Weapons";
+                }
                 if (product.IsApparel) return "Apparel";
                 if (product.IsIngestible) return "Food";
                 if (product.IsMedicine) return "Medicine";
@@ -191,14 +196,16 @@ namespace CorvusProductionUI
         private AvailabilityFilter availabilityFilter = AvailabilityFilter.Available;
         private string selectedCategory = "All";
         private string selectedMod = "All";
+        private string selectedWorkstation = "All";
         private Vector2 scrollPosition;
 
         private readonly List<string> categories = new List<string> 
         { 
-            "All", "Weapons", "Apparel", "Food", "Medicine", "Materials", "Buildings", "Drugs", "Other" 
+            "All", "Ranged Weapons", "Melee Weapons", "Apparel", "Food", "Medicine", "Materials", "Buildings", "Drugs", "Other" 
         };
 
         private List<string> availableMods = new List<string>();
+        private List<string> availableWorkstations = new List<string>();
         private Vector2 billScrollPosition;
 
         public ProductionWindow()
@@ -239,6 +246,62 @@ namespace CorvusProductionUI
             // Build available mods list
             availableMods = new List<string> { "All" };
             availableMods.AddRange(mods.OrderBy(m => m == "Vanilla" ? "0" : m == "Royalty" ? "1" : m == "Ideology" ? "2" : m == "Biotech" ? "3" : m == "Anomaly" ? "4" : m));
+            
+            // Build available workstations list
+            BuildWorkstationsList();
+        }
+
+        private void BuildWorkstationsList()
+        {
+            var workstations = new HashSet<ThingDef>();
+            var existingWorkstations = new HashSet<ThingDef>();
+            
+            // Get existing workstations in the colony (only actual buildings/workbenches)
+            if (Find.CurrentMap?.listerThings != null)
+            {
+                foreach (var thing in Find.CurrentMap.listerThings.AllThings)
+                {
+                    if (thing is IBillGiver && thing.def.recipes?.Any() == true)
+                    {
+                        // Filter out pawns, animals, corpses - only include actual workbenches
+                        if (thing.def.category == ThingCategory.Building && 
+                            thing.def.building != null && 
+                            !thing.def.race?.Animal == true && 
+                            !thing.def.race?.Humanlike == true &&
+                            thing.def.thingClass != typeof(Corpse))
+                        {
+                            existingWorkstations.Add(thing.def);
+                        }
+                    }
+                }
+            }
+            
+            // Get all potential workstations from available recipes (only actual workbenches)
+            foreach (var recipeInfo in allRecipes)
+            {
+                if (recipeInfo.workbenchDef != null)
+                {
+                    // Filter out non-building workbenches (animals, pawns, etc.)
+                    if (recipeInfo.workbenchDef.category == ThingCategory.Building && 
+                        recipeInfo.workbenchDef.building != null && 
+                        recipeInfo.workbenchDef.race?.Animal != true && 
+                        recipeInfo.workbenchDef.race?.Humanlike != true)
+                    {
+                        workstations.Add(recipeInfo.workbenchDef);
+                    }
+                }
+            }
+            
+            // Build the list with existing workstations first, then potential ones
+            availableWorkstations = new List<string> { "All" };
+            
+            // Add existing workstations (marked with checkmark)
+            var existingList = existingWorkstations.OrderBy(w => w.label).Select(w => $"✓ {w.label}");
+            availableWorkstations.AddRange(existingList);
+            
+            // Add potential workstations (not marked)
+            var potentialList = workstations.Except(existingWorkstations).OrderBy(w => w.label).Select(w => w.label);
+            availableWorkstations.AddRange(potentialList);
         }
 
         private void FilterRecipes()
@@ -261,6 +324,14 @@ namespace CorvusProductionUI
             if (selectedMod != "All" && recipeInfo.modSource != selectedMod)
                 return false;
 
+            // Workstation filter
+            if (selectedWorkstation != "All")
+            {
+                var workstationName = selectedWorkstation.StartsWith("✓ ") ? selectedWorkstation.Substring(2) : selectedWorkstation;
+                if (recipeInfo.workbenchDef?.label != workstationName)
+                    return false;
+            }
+
             // Availability filter
             switch (availabilityFilter)
             {
@@ -273,6 +344,16 @@ namespace CorvusProductionUI
             }
 
             return true;
+        }
+
+        private void ResetAllFilters()
+        {
+            selectedWorkstation = "All";
+            selectedCategory = "All";
+            selectedMod = "All";
+            availabilityFilter = AvailabilityFilter.Available;
+            searchText = "";
+            FilterRecipes();
         }
 
         private string GetAvailabilityDisplayName(AvailabilityFilter filter)
@@ -329,21 +410,54 @@ namespace CorvusProductionUI
             Text.Font = GameFont.Medium;
             Widgets.Label(titleRect, $"Production Planner ({filteredRecipes.Count} recipes found)");
             
-            // Filter controls
-            var filterY = titleRect.yMax + 10f;
-            var filterHeight = 30f;
+            // Filter controls with improved layout
+            var filterY = titleRect.yMax + 15f;
+            var labelHeight = 18f;
+            var filterHeight = 28f;
+            var spacing = 15f;
             
-            // Mod dropdown
-            var modRect = new Rect(rect.x, filterY, 200f, filterHeight);
-            if (Widgets.ButtonText(modRect, selectedMod))
+            // Calculate proportional widths for better balance
+            var totalFilterWidth = rect.width - 120f; // Reserve space for reset button
+            var workstationWidth = totalFilterWidth * 0.20f; // 20%
+            var categoryWidth = totalFilterWidth * 0.15f;    // 15%
+            var availabilityWidth = totalFilterWidth * 0.18f; // 18%
+            var sourceWidth = totalFilterWidth * 0.20f;      // 20%
+            var searchWidth = totalFilterWidth * 0.22f;      // 22%
+            
+            // Filter labels - smaller font for cleaner look
+            Text.Font = GameFont.Tiny;
+            
+            var workstationLabelRect = new Rect(rect.x, filterY, workstationWidth, labelHeight);
+            Widgets.Label(workstationLabelRect, "Workstation:");
+            
+            var categoryLabelRect = new Rect(workstationLabelRect.xMax + spacing, filterY, categoryWidth, labelHeight);
+            Widgets.Label(categoryLabelRect, "Type:");
+            
+            var availabilityLabelRect = new Rect(categoryLabelRect.xMax + spacing, filterY, availabilityWidth, labelHeight);
+            Widgets.Label(availabilityLabelRect, "Availability:");
+            
+            var modLabelRect = new Rect(availabilityLabelRect.xMax + spacing, filterY, sourceWidth, labelHeight);
+            Widgets.Label(modLabelRect, "Source:");
+            
+            var searchLabelRect = new Rect(modLabelRect.xMax + spacing, filterY, searchWidth, labelHeight);
+            Widgets.Label(searchLabelRect, "Search:");
+            
+            Text.Font = GameFont.Small; // Reset font
+            
+            // Filter controls with better spacing
+            var controlsY = filterY + labelHeight + 8f;
+            
+            // Workstation dropdown
+            var workstationRect = new Rect(rect.x, controlsY, workstationWidth, filterHeight);
+            if (Widgets.ButtonText(workstationRect, selectedWorkstation))
             {
-                var modOptions = availableMods.Select(m => 
-                    new FloatMenuOption(m, () => { selectedMod = m; FilterRecipes(); })).ToList();
-                Find.WindowStack.Add(new FloatMenu(modOptions));
+                var workstationOptions = availableWorkstations.Select(w => 
+                    new FloatMenuOption(w, () => { selectedWorkstation = w; FilterRecipes(); })).ToList();
+                Find.WindowStack.Add(new FloatMenu(workstationOptions));
             }
             
             // Category dropdown
-            var categoryRect = new Rect(modRect.xMax + 10f, filterY, 150f, filterHeight);
+            var categoryRect = new Rect(workstationRect.xMax + spacing, controlsY, categoryWidth, filterHeight);
             if (Widgets.ButtonText(categoryRect, selectedCategory))
             {
                 var floatMenu = new FloatMenu(categories.Select(c => 
@@ -352,7 +466,7 @@ namespace CorvusProductionUI
             }
 
             // Availability dropdown
-            var availabilityRect = new Rect(categoryRect.xMax + 10f, filterY, 150f, filterHeight);
+            var availabilityRect = new Rect(categoryRect.xMax + spacing, controlsY, availabilityWidth, filterHeight);
             if (Widgets.ButtonText(availabilityRect, GetAvailabilityDisplayName(availabilityFilter)))
             {
                 var options = new List<FloatMenuOption>();
@@ -366,19 +480,35 @@ namespace CorvusProductionUI
                 }
                 Find.WindowStack.Add(new FloatMenu(options));
             }
+            
+            // Mod dropdown
+            var modRect = new Rect(availabilityRect.xMax + spacing, controlsY, sourceWidth, filterHeight);
+            if (Widgets.ButtonText(modRect, selectedMod))
+            {
+                var modOptions = availableMods.Select(m => 
+                    new FloatMenuOption(m, () => { selectedMod = m; FilterRecipes(); })).ToList();
+                Find.WindowStack.Add(new FloatMenu(modOptions));
+            }
 
             // Search box
-            var searchRect = new Rect(availabilityRect.xMax + 10f, filterY, 180f, filterHeight);
+            var searchRect = new Rect(modRect.xMax + spacing, controlsY, searchWidth, filterHeight);
             var newSearchText = Widgets.TextField(searchRect, searchText);
             if (newSearchText != searchText)
             {
                 searchText = newSearchText;
                 FilterRecipes();
             }
+            
+            // Reset button (aligned to the right)
+            var resetRect = new Rect(searchRect.xMax + spacing, controlsY, 90f, filterHeight);
+            if (Widgets.ButtonText(resetRect, "Reset"))
+            {
+                ResetAllFilters();
+            }
 
-            // Split the remaining area 60/40
-            var remainingHeight = rect.height - (filterY + filterHeight + 20f);
-            var remainingY = filterY + filterHeight + 10f;
+            // Split the remaining area 60/40 with better spacing
+            var remainingHeight = rect.height - (controlsY + filterHeight + 20f);
+            var remainingY = controlsY + filterHeight + 15f;
             
             // Recipe list (left 60%)
             var recipeListRect = new Rect(rect.x, remainingY, rect.width * 0.6f - 5f, remainingHeight);
