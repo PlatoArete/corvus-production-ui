@@ -529,7 +529,7 @@ namespace CorvusProductionUI
             
             // List area
             var listRect = new Rect(rect.x, rect.y + 30f, rect.width, rect.height - 30f);
-            var itemHeight = 65f; // Simpler layout, less height needed
+            var itemHeight = 95f; // Increased height for ingredients and skills
             var contentHeight = filteredRecipes.Count * itemHeight;
             var viewRect = new Rect(0f, 0f, listRect.width - 20f, contentHeight);
             
@@ -558,23 +558,49 @@ namespace CorvusProductionUI
             var recipe = recipeInfo.recipe;
             var innerRect = rect.ContractedBy(5f);
             
-            // Recipe name
-            var nameRect = new Rect(innerRect.x, innerRect.y, innerRect.width * 0.4f, 20f);
+            // Recipe name with info button
+            var nameRect = new Rect(innerRect.x, innerRect.y, innerRect.width * 0.35f, 20f);
             Widgets.Label(nameRect, recipe.label.CapitalizeFirst());
             
+            // Info button (to the right of recipe name)
+            var infoButtonRect = new Rect(nameRect.xMax + 5f, innerRect.y - 2f, 24f, 24f);
+            var producedThing = recipe.ProducedThingDef;
+            if (producedThing != null && Widgets.InfoCardButton(infoButtonRect, producedThing))
+            {
+                // InfoCardButton handles opening the info card automatically
+            }
+            
             // Category
-            var categoryRect = new Rect(nameRect.xMax + 5f, innerRect.y, 80f, 20f);
+            var categoryRect = new Rect(infoButtonRect.xMax + 5f, innerRect.y, 90f, 20f);
             Widgets.Label(categoryRect, recipeInfo.category);
             
-            // Workbench
-            var workbenchRect = new Rect(innerRect.x, innerRect.y + 22f, innerRect.width * 0.5f, 20f);
+            // Workbench (second row)
+            var workbenchRect = new Rect(innerRect.x, innerRect.y + 22f, innerRect.width * 0.5f, 18f);
             var workbenchText = recipeInfo.workbenchDef?.label ?? "Unknown";
             GUI.color = recipeInfo.hasWorkbench ? Color.green : Color.red;
             Widgets.Label(workbenchRect, workbenchText);
             GUI.color = Color.white;
             
-            // Add Bill button
-            var addBillRect = new Rect(innerRect.xMax - 80f, innerRect.y + 10f, 75f, 30f);
+            // Ingredients (third row)
+            var ingredientsY = innerRect.y + 42f;
+            var ingredientsRect = new Rect(innerRect.x, ingredientsY, innerRect.width * 0.7f, 16f);
+            Text.Font = GameFont.Tiny;
+            var ingredientsText = GetIngredientsText(recipe);
+            GUI.color = Color.gray;
+            Widgets.Label(ingredientsRect, ingredientsText);
+            GUI.color = Color.white;
+            
+            // Skills (fourth row)
+            var skillsY = innerRect.y + 60f;
+            var skillsRect = new Rect(innerRect.x, skillsY, innerRect.width * 0.7f, 16f);
+            var skillsText = GetSkillsText(recipe);
+            GUI.color = Color.gray;
+            Widgets.Label(skillsRect, skillsText);
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small; // Reset font
+            
+            // Add Bill button (right side, centered vertically)
+            var addBillRect = new Rect(innerRect.xMax - 80f, innerRect.y + 25f, 75f, 30f);
             var canCreateBill = recipeInfo.CanCreateBill();
             
             if (!canCreateBill)
@@ -589,6 +615,57 @@ namespace CorvusProductionUI
             }
             
             GUI.color = Color.white;
+        }
+
+        private string GetIngredientsText(RecipeDef recipe)
+        {
+            if (recipe.ingredients?.Any() != true)
+                return "No ingredients required";
+                
+            var ingredients = new List<string>();
+            foreach (var ingredient in recipe.ingredients)
+            {
+                var count = ingredient.GetBaseCount();
+                var materialNames = ingredient.filter.AllowedThingDefs.Take(3).Select(t => t.label).ToList();
+                
+                if (materialNames.Count == 1)
+                {
+                    ingredients.Add($"{materialNames[0]} x{count}");
+                }
+                else
+                {
+                    var materialsText = materialNames.Count > 3 ? 
+                        string.Join("/", materialNames.Take(2)) + "/..." : 
+                        string.Join("/", materialNames);
+                    ingredients.Add($"{materialsText} x{count}");
+                }
+            }
+            
+            return string.Join(", ", ingredients);
+        }
+
+        private string GetSkillsText(RecipeDef recipe)
+        {
+            var skills = new List<string>();
+            
+            if (recipe.workSkill != null)
+            {
+                var skillLevel = recipe.workSkillLearnFactor > 0 ? 
+                    $" (learns {recipe.workSkillLearnFactor:F1}x)" : "";
+                skills.Add($"{recipe.workSkill.label}{skillLevel}");
+            }
+            
+            if (recipe.requiredGiverWorkType != null)
+            {
+                skills.Add($"Work: {recipe.requiredGiverWorkType.label}");
+            }
+            
+            if (recipe.workAmount > 0)
+            {
+                skills.Add($"Work: {recipe.workAmount}");
+            }
+            
+            return skills.Any() ? string.Join(", ", skills) : "No skill requirements";
         }
 
         private void DrawBillList(Rect rect)
