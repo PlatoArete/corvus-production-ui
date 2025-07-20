@@ -62,29 +62,25 @@ namespace CorvusProductionUI
                 var product = recipe.products.First().thingDef;
                 if (product.IsWeapon) 
                 {
-                    // Distinguish between ranged and melee weapons
-                    if (product.IsRangedWeapon) return "Ranged Weapons";
-                    else return "Melee Weapons";
+                    if (product.IsRangedWeapon) return "CategoryRangedWeapons".Translate();
+                    else return "CategoryMeleeWeapons".Translate();
                 }
-                if (product.IsApparel) return "Apparel";
-                if (product.IsIngestible) return "Food";
-                if (product.IsMedicine) return "Medicine";
-                if (product.IsStuff) return "Materials";
-                if (product.building != null) return "Buildings";
-                if (product.thingCategories?.Any(c => c.defName.Contains("Drug")) == true) return "Drugs";
+                if (product.IsApparel) return "CategoryApparel".Translate();
+                if (product.IsIngestible) return "CategoryFood".Translate();
+                if (product.IsMedicine) return "CategoryMedicine".Translate();
+                if (product.IsStuff) return "CategoryMaterials".Translate();
+                if (product.building != null) return "CategoryBuildings".Translate();
+                if (product.thingCategories?.Any(c => c.defName.Contains("Drug")) == true) return "CategoryDrugs".Translate();
             }
-            return "Other";
+            return "CategoryOther".Translate();
         }
 
         private ThingDef GetWorkbenchForRecipe(RecipeDef recipe)
         {
-            // First try recipeUsers (most common way recipes are linked to workbenches)
             if (recipe.recipeUsers?.Any() == true)
             {
                 return recipe.recipeUsers.First();
             }
-            
-            // Fallback: look for workbenches that list this recipe
             return DefDatabase<ThingDef>.AllDefs.FirstOrDefault(t => 
                 t.recipes?.Contains(recipe) == true);
         }
@@ -98,7 +94,6 @@ namespace CorvusProductionUI
         private bool HasMaterials()
         {
             if (recipe.ingredients == null) return true;
-            
             foreach (var ingredient in recipe.ingredients)
             {
                 var availableCount = 0;
@@ -113,19 +108,15 @@ namespace CorvusProductionUI
 
         private string GetModSource(RecipeDef recipe)
         {
-            if (recipe.modContentPack == null) return "Unknown";
+            if (recipe.modContentPack == null) return "SourceUnknown".Translate();
+            if (recipe.modContentPack.IsCoreMod) return "SourceVanilla".Translate();
             
-            // Handle core game content
-            if (recipe.modContentPack.IsCoreMod) return "Vanilla";
-            
-            // Handle official DLCs
             string modName = recipe.modContentPack.Name;
-            if (modName.Contains("Royalty")) return "Royalty";
-            if (modName.Contains("Ideology")) return "Ideology";
-            if (modName.Contains("Biotech")) return "Biotech";
-            if (modName.Contains("Anomaly")) return "Anomaly";
+            if (modName.Contains("Royalty")) return "SourceRoyalty".Translate();
+            if (modName.Contains("Ideology")) return "SourceIdeology".Translate();
+            if (modName.Contains("Biotech")) return "SourceBiotech".Translate();
+            if (modName.Contains("Anomaly")) return "SourceAnomaly".Translate();
             
-            // Return the mod name for other mods
             return modName;
         }
 
@@ -164,7 +155,11 @@ namespace CorvusProductionUI
         public void CreateBill(int count = 1, CustomRepeatMode repeatMode = CustomRepeatMode.DoXTimes)
         {
             var workbench = GetBestWorkbench();
-            if (workbench == null || !(workbench is IBillGiver billGiver)) return;
+            if (workbench == null || !(workbench is IBillGiver billGiver))
+            {
+                Messages.Message("MessageNoWorkbenchForBill".Translate(), MessageTypeDefOf.RejectInput);
+                return;
+            }
             
             var bill = new Bill_Production(recipe);
             bill.SetStoreMode(BillStoreModeDefOf.BestStockpile);
@@ -185,6 +180,7 @@ namespace CorvusProductionUI
             }
             
             billGiver.BillStack.AddBill(bill);
+            Messages.Message("MessageBillCreated".Translate(workbench.Label), MessageTypeDefOf.TaskCompletion);
         }
     }
 
@@ -194,19 +190,15 @@ namespace CorvusProductionUI
         private List<RecipeInfo> filteredRecipes;
         private string searchText = "";
         private AvailabilityFilter availabilityFilter = AvailabilityFilter.Available;
-        private string selectedCategory = "All";
-        private string selectedMod = "All";
-        private string selectedWorkstation = "All";
+        private string selectedCategory = "CategoryAll".Translate();
+        private string selectedMod = "SourceAll".Translate();
+        private string selectedWorkstation = "WorkstationAll".Translate();
         private Vector2 scrollPosition;
-
-        private readonly List<string> categories = new List<string> 
-        { 
-            "All", "Ranged Weapons", "Melee Weapons", "Apparel", "Food", "Medicine", "Materials", "Buildings", "Drugs", "Other" 
-        };
-
-        private List<string> availableMods = new List<string>();
-        private List<string> availableWorkstations = new List<string>();
         private Vector2 billScrollPosition;
+
+        private readonly List<string> categories;
+        private List<string> availableMods;
+        private List<string> availableWorkstations;
 
         public ProductionWindow()
         {
@@ -216,6 +208,21 @@ namespace CorvusProductionUI
             this.doCloseButton = false;
             this.closeOnClickedOutside = false;
             this.absorbInputAroundWindow = true;
+            
+            // Initialize categories with translations
+            categories = new List<string> 
+            { 
+                "CategoryAll".Translate(),
+                "CategoryRangedWeapons".Translate(),
+                "CategoryMeleeWeapons".Translate(),
+                "CategoryApparel".Translate(),
+                "CategoryFood".Translate(),
+                "CategoryMedicine".Translate(),
+                "CategoryMaterials".Translate(),
+                "CategoryBuildings".Translate(),
+                "CategoryDrugs".Translate(),
+                "CategoryOther".Translate()
+            };
             
             LoadRecipes();
             FilterRecipes();
@@ -230,11 +237,8 @@ namespace CorvusProductionUI
             
             foreach (var recipe in DefDatabase<RecipeDef>.AllDefs)
             {
-                // Only include recipes that are available based on research
                 if (recipe.researchPrerequisite != null && !recipe.researchPrerequisite.IsFinished)
                     continue;
-                    
-                // Skip recipes without products
                 if (recipe.products?.Any() != true)
                     continue;
 
@@ -243,65 +247,33 @@ namespace CorvusProductionUI
                 mods.Add(recipeInfo.modSource);
             }
             
-            // Build available mods list
-            availableMods = new List<string> { "All" };
-            availableMods.AddRange(mods.OrderBy(m => m == "Vanilla" ? "0" : m == "Royalty" ? "1" : m == "Ideology" ? "2" : m == "Biotech" ? "3" : m == "Anomaly" ? "4" : m));
+            availableMods = new List<string> { "SourceAll".Translate() };
+            availableMods.AddRange(mods.OrderBy(m => 
+                m == "SourceVanilla".Translate() ? "0" : 
+                m == "SourceRoyalty".Translate() ? "1" : 
+                m == "SourceIdeology".Translate() ? "2" : 
+                m == "SourceBiotech".Translate() ? "3" : 
+                m == "SourceAnomaly".Translate() ? "4" : m));
             
-            // Build available workstations list
             BuildWorkstationsList();
         }
 
         private void BuildWorkstationsList()
         {
-            var workstations = new HashSet<ThingDef>();
-            var existingWorkstations = new HashSet<ThingDef>();
-            
-            // Get existing workstations in the colony (only actual buildings/workbenches)
-            if (Find.CurrentMap?.listerThings != null)
+            var workstations = new HashSet<string>();
+            foreach (var recipe in allRecipes)
             {
-                foreach (var thing in Find.CurrentMap.listerThings.AllThings)
+                if (recipe.workbenchDef != null)
                 {
-                    if (thing is IBillGiver && thing.def.recipes?.Any() == true)
-                    {
-                        // Filter out pawns, animals, corpses - only include actual workbenches
-                        if (thing.def.category == ThingCategory.Building && 
-                            thing.def.building != null && 
-                            !thing.def.race?.Animal == true && 
-                            !thing.def.race?.Humanlike == true &&
-                            thing.def.thingClass != typeof(Corpse))
-                        {
-                            existingWorkstations.Add(thing.def);
-                        }
-                    }
+                    string label = recipe.hasWorkbench ? 
+                        "WorkstationAvailable".Translate(recipe.workbenchDef.label) :
+                        "WorkstationUnavailable".Translate(recipe.workbenchDef.label);
+                    workstations.Add(label);
                 }
             }
             
-            // Get all potential workstations from available recipes (only actual workbenches)
-            foreach (var recipeInfo in allRecipes)
-            {
-                if (recipeInfo.workbenchDef != null)
-                {
-                    // Filter out non-building workbenches (animals, pawns, etc.)
-                    if (recipeInfo.workbenchDef.category == ThingCategory.Building && 
-                        recipeInfo.workbenchDef.building != null && 
-                        recipeInfo.workbenchDef.race?.Animal != true && 
-                        recipeInfo.workbenchDef.race?.Humanlike != true)
-                    {
-                        workstations.Add(recipeInfo.workbenchDef);
-                    }
-                }
-            }
-            
-            // Build the list with existing workstations first, then potential ones
-            availableWorkstations = new List<string> { "All" };
-            
-            // Add existing workstations (marked with checkmark)
-            var existingList = existingWorkstations.OrderBy(w => w.label).Select(w => $"✓ {w.label}");
-            availableWorkstations.AddRange(existingList);
-            
-            // Add potential workstations (not marked)
-            var potentialList = workstations.Except(existingWorkstations).OrderBy(w => w.label).Select(w => w.label);
-            availableWorkstations.AddRange(potentialList);
+            availableWorkstations = new List<string> { "WorkstationAll".Translate() };
+            availableWorkstations.AddRange(workstations.OrderBy(w => w));
         }
 
         private void FilterRecipes()
@@ -317,15 +289,15 @@ namespace CorvusProductionUI
                 return false;
 
             // Category filter
-            if (selectedCategory != "All" && recipeInfo.category != selectedCategory)
+            if (selectedCategory != "CategoryAll".Translate() && recipeInfo.category != selectedCategory)
                 return false;
 
             // Mod filter
-            if (selectedMod != "All" && recipeInfo.modSource != selectedMod)
+            if (selectedMod != "SourceAll".Translate() && recipeInfo.modSource != selectedMod)
                 return false;
 
             // Workstation filter
-            if (selectedWorkstation != "All")
+            if (selectedWorkstation != "WorkstationAll".Translate())
             {
                 var workstationName = selectedWorkstation.StartsWith("✓ ") ? selectedWorkstation.Substring(2) : selectedWorkstation;
                 if (recipeInfo.workbenchDef?.label != workstationName)
@@ -348,9 +320,9 @@ namespace CorvusProductionUI
 
         private void ResetAllFilters()
         {
-            selectedWorkstation = "All";
-            selectedCategory = "All";
-            selectedMod = "All";
+            selectedWorkstation = "WorkstationAll".Translate();
+            selectedCategory = "CategoryAll".Translate();
+            selectedMod = "SourceAll".Translate();
             availabilityFilter = AvailabilityFilter.Available;
             searchText = "";
             FilterRecipes();
@@ -361,13 +333,13 @@ namespace CorvusProductionUI
             switch (filter)
             {
                 case AvailabilityFilter.Available:
-                    return "Available";
+                    return "AvailabilityAvailable".Translate();
                 case AvailabilityFilter.NoMaterials:
-                    return "No Materials";
+                    return "AvailabilityNoMaterials".Translate();
                 case AvailabilityFilter.NoWorkbench:
-                    return "No Workbench";
+                    return "AvailabilityNoWorkbench".Translate();
                 default:
-                    return filter.ToString();
+                    return "AvailabilityAll".Translate();
             }
         }
 
@@ -376,13 +348,13 @@ namespace CorvusProductionUI
             switch (mode)
             {
                 case CustomRepeatMode.DoXTimes:
-                    return $"x{count}";
+                    return "RepeatCount".Translate(count);
                 case CustomRepeatMode.DoUntilX:
-                    return $"≤{count}";
+                    return "RepeatTarget".Translate(count);
                 case CustomRepeatMode.DoForever:
-                    return "∞";
+                    return "RepeatForever".Translate();
                 default:
-                    return $"x{count}";
+                    return count.ToString();
             }
         }
 
@@ -391,13 +363,13 @@ namespace CorvusProductionUI
             switch (mode)
             {
                 case CustomRepeatMode.DoXTimes:
-                    return "Do X times";
+                    return "RepeatModeDoXTimes".Translate();
                 case CustomRepeatMode.DoUntilX:
-                    return "Do until you have X";
+                    return "RepeatModeDoUntilX".Translate();
                 case CustomRepeatMode.DoForever:
-                    return "Do forever";
+                    return "RepeatModeDoForever".Translate();
                 default:
-                    return "Do X times";
+                    return mode.ToString();
             }
         }
 
@@ -501,7 +473,7 @@ namespace CorvusProductionUI
             
             // Reset button (aligned to the right)
             var resetRect = new Rect(searchRect.xMax + spacing, controlsY, 90f, filterHeight);
-            if (Widgets.ButtonText(resetRect, "Reset"))
+            if (Widgets.ButtonText(resetRect, "Reset".Translate()))
             {
                 ResetAllFilters();
             }
@@ -608,7 +580,7 @@ namespace CorvusProductionUI
                 GUI.color = Color.gray;
             }
             
-            if (Widgets.ButtonText(addBillRect, "Add Bill") && canCreateBill)
+            if (Widgets.ButtonText(addBillRect, "Add Bill".Translate()) && canCreateBill)
             {
                 recipeInfo.CreateBill(1, CustomRepeatMode.DoXTimes);
                 Messages.Message($"Added bill: {recipe.label}", MessageTypeDefOf.PositiveEvent);
@@ -620,7 +592,7 @@ namespace CorvusProductionUI
         private string GetIngredientsText(RecipeDef recipe)
         {
             if (recipe.ingredients?.Any() != true)
-                return "No ingredients required";
+                return "No ingredients required".Translate();
                 
             var ingredients = new List<string>();
             foreach (var ingredient in recipe.ingredients)
@@ -665,7 +637,7 @@ namespace CorvusProductionUI
                 skills.Add($"Work: {recipe.workAmount}");
             }
             
-            return skills.Any() ? string.Join(", ", skills) : "No skill requirements";
+            return skills.Any() ? string.Join(", ", skills) : "No skill requirements".Translate();
         }
 
         private void DrawBillList(Rect rect)
@@ -686,7 +658,7 @@ namespace CorvusProductionUI
             {
                 var noBillsRect = new Rect(listRect.x + 10f, listRect.y + 10f, listRect.width - 20f, 30f);
                 GUI.color = Color.gray;
-                Widgets.Label(noBillsRect, "No bills found");
+                Widgets.Label(noBillsRect, "No bills found".Translate());
                 GUI.color = Color.white;
                 return;
             }
@@ -778,7 +750,7 @@ namespace CorvusProductionUI
             
             var workbenchRect = new Rect(innerRect.x, innerRect.y + 22f, innerRect.width * 0.6f, 20f);
             GUI.color = Color.gray;
-            Widgets.Label(workbenchRect, $"@ {workbench.Label}");
+            Widgets.Label(workbenchRect, $"@ {workbench.Label}".Translate());
             GUI.color = Color.white;
             
             // Bill controls (right side)
@@ -786,7 +758,7 @@ namespace CorvusProductionUI
             
             // Minus button
             var minusRect = new Rect(innerRect.x + 10f, controlsY, 25f, 25f);
-            if (Widgets.ButtonText(minusRect, "-"))
+            if (Widgets.ButtonText(minusRect, "-".Translate()))
             {
                 ModifyBillCount(bill, -1);
             }
@@ -802,7 +774,7 @@ namespace CorvusProductionUI
             
             // Plus button
             var plusRect = new Rect(countRect.xMax + 5f, controlsY, 25f, 25f);
-            if (Widgets.ButtonText(plusRect, "+"))
+            if (Widgets.ButtonText(plusRect, "+".Translate()))
             {
                 ModifyBillCount(bill, 1);
             }
@@ -817,7 +789,7 @@ namespace CorvusProductionUI
             
             // Details button
             var detailsRect = new Rect(modeRect.xMax + 10f, controlsY, 60f, 25f);
-            if (Widgets.ButtonText(detailsRect, "Details"))
+            if (Widgets.ButtonText(detailsRect, "Details".Translate()))
             {
                 if (bill is Bill_Production productionBill)
                 {
@@ -839,22 +811,22 @@ namespace CorvusProductionUI
 
         private string GetBillCountText(Bill bill)
         {
-            if (!(bill is Bill_Production productionBill)) return "1";
+            if (!(bill is Bill_Production productionBill)) return "1".Translate();
             
-            if (productionBill.repeatMode == BillRepeatModeDefOf.Forever) return "∞";
-            if (productionBill.repeatMode == BillRepeatModeDefOf.RepeatCount) return productionBill.repeatCount.ToString();
-            if (productionBill.repeatMode == BillRepeatModeDefOf.TargetCount) return productionBill.targetCount.ToString();
-            return "1";
+            if (productionBill.repeatMode == BillRepeatModeDefOf.Forever) return "RepeatForever".Translate();
+            if (productionBill.repeatMode == BillRepeatModeDefOf.RepeatCount) return "RepeatCount".Translate(productionBill.repeatCount);
+            if (productionBill.repeatMode == BillRepeatModeDefOf.TargetCount) return "RepeatTarget".Translate(productionBill.targetCount);
+            return "1".Translate();
         }
 
         private string GetBillModeText(Bill bill)
         {
-            if (!(bill is Bill_Production productionBill)) return "x1";
+            if (!(bill is Bill_Production productionBill)) return "x1".Translate();
             
-            if (productionBill.repeatMode == BillRepeatModeDefOf.Forever) return "∞";
-            if (productionBill.repeatMode == BillRepeatModeDefOf.RepeatCount) return $"x{productionBill.repeatCount}";
-            if (productionBill.repeatMode == BillRepeatModeDefOf.TargetCount) return $"≤{productionBill.targetCount}";
-            return "x1";
+            if (productionBill.repeatMode == BillRepeatModeDefOf.Forever) return "RepeatForever".Translate();
+            if (productionBill.repeatMode == BillRepeatModeDefOf.RepeatCount) return "RepeatCount".Translate(productionBill.repeatCount);
+            if (productionBill.repeatMode == BillRepeatModeDefOf.TargetCount) return "RepeatTarget".Translate(productionBill.targetCount);
+            return "x1".Translate();
         }
 
         private void ModifyBillCount(Bill bill, int delta)
@@ -893,15 +865,15 @@ namespace CorvusProductionUI
             
             var options = new List<FloatMenuOption>
             {
-                new FloatMenuOption("Do X times", () => {
+                new FloatMenuOption("RepeatModeDoXTimes".Translate(), () => {
                     productionBill.repeatMode = BillRepeatModeDefOf.RepeatCount;
                     if (productionBill.repeatCount <= 0) productionBill.repeatCount = 1;
                 }),
-                new FloatMenuOption("Do until you have X", () => {
+                new FloatMenuOption("RepeatModeDoUntilX".Translate(), () => {
                     productionBill.repeatMode = BillRepeatModeDefOf.TargetCount;
                     if (productionBill.targetCount <= 0) productionBill.targetCount = 1;
                 }),
-                new FloatMenuOption("Do forever", () => {
+                new FloatMenuOption("RepeatModeDoForever".Translate(), () => {
                     productionBill.repeatMode = BillRepeatModeDefOf.Forever;
                 })
             };

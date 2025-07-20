@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<LanguageData>
+    <!-- Main Button -->
+    <Production>Production</Production>
+    <ProductionDesc>Open the production management interface.</ProductionDesc>
+
+    <!-- Window Title -->
+    <ProductionWindowTitle>Production Management</ProductionWindowTitle>
+
+    <!-- Filter Labels -->
+    <FilterBySearch>Search recipes...</FilterBySearch>
+    <FilterByCategory>Category</FilterByCategory>
+    <FilterByMod>Source</FilterByMod>
+    <FilterByWorkstation>Workstation</FilterByWorkstation>
+    <FilterByAvailability>Availability</FilterByAvailability>
+    <ResetFilters>Reset Filters</ResetFilters>
+
+    <!-- Categories -->
+    <CategoryAll>All</CategoryAll>
+    <CategoryRangedWeapons>Ranged Weapons</CategoryRangedWeapons>
+    <CategoryMeleeWeapons>Melee Weapons</CategoryMeleeWeapons>
+    <CategoryApparel>Apparel</CategoryApparel>
+    <CategoryFood>Food</CategoryFood>
+    <CategoryMedicine>Medicine</CategoryMedicine>
+    <CategoryMaterials>Materials</CategoryMaterials>
+    <CategoryBuildings>Buildings</CategoryBuildings>
+    <CategoryDrugs>Drugs</CategoryDrugs>
+    <CategoryOther>Other</CategoryOther>
+
+    <!-- Mod Sources -->
+    <SourceAll>All</SourceAll>
+    <SourceVanilla>Vanilla</SourceVanilla>
+    <SourceRoyalty>Royalty</SourceRoyalty>
+    <SourceIdeology>Ideology</SourceIdeology>
+    <SourceBiotech>Biotech</SourceBiotech>
+    <SourceAnomaly>Anomaly</SourceAnomaly>
+    <SourceUnknown>Unknown</SourceUnknown>
+
+    <!-- Availability States -->
+    <AvailabilityAll>All</AvailabilityAll>
+    <AvailabilityAvailable>Available</AvailabilityAvailable>
+    <AvailabilityNoMaterials>No Materials</AvailabilityNoMaterials>
+    <AvailabilityNoWorkbench>No Workbench</AvailabilityNoWorkbench>
+
+    <!-- Workstation -->
+    <WorkstationAll>All</WorkstationAll>
+    <WorkstationAvailable>✓ {0}</WorkstationAvailable>
+    <WorkstationUnavailable>{0}</WorkstationUnavailable>
+
+    <!-- Bill Management -->
+    <AddBill>Add Bill</AddBill>
+    <BillDetails>Details...</BillDetails>
+    <DeleteBill>Delete</DeleteBill>
+    <BillCount>Count: {0}</BillCount>
+    <BillTarget>Target: {0}</BillTarget>
+
+    <!-- Repeat Modes -->
+    <RepeatModeDoXTimes>Do X times</RepeatModeDoXTimes>
+    <RepeatModeDoUntilX>Do until X</RepeatModeDoUntilX>
+    <RepeatModeDoForever>Do forever</RepeatModeDoForever>
+    <RepeatCount>× {0}</RepeatCount>
+    <RepeatTarget>≤ {0}</RepeatTarget>
+    <RepeatForever>∞</RepeatForever>
+
+    <!-- Recipe Info -->
+    <RequiredMaterials>Materials:</RequiredMaterials>
+    <RequiredSkills>Skills:</RequiredSkills>
+    <WorkAmount>Work: {0}</WorkAmount>
+    <NoMaterialsAvailable>No materials available</NoMaterialsAvailable>
+    <NoWorkbenchAvailable>No workbench available</NoWorkbenchAvailable>
+    <SkillLevel>{0} {1}</SkillLevel>
+
+    <!-- Tooltips -->
+    <TooltipResetFilters>Clear all filters and show all recipes</TooltipResetFilters>
+    <TooltipAddBill>Add this recipe as a new bill to the workbench with the fewest existing bills</TooltipAddBill>
+    <TooltipBillDetails>Open detailed configuration for this bill</TooltipBillDetails>
+    <TooltipDeleteBill>Remove this bill from the workbench</TooltipDeleteBill>
+    <TooltipRecipeInfo>View detailed information about this item</TooltipRecipeInfo>
+
+    <!-- Messages -->
+    <MessageNoWorkbenchForBill>Cannot create bill: No available workbench</MessageNoWorkbenchForBill>
+    <MessageBillCreated>Created new bill at {0}</MessageBillCreated>
+    <MessageBillDeleted>Deleted bill from {0}</MessageBillDeleted>
+</LanguageData> 

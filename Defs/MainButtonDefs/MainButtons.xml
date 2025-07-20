@@ -3,7 +3,7 @@
     <MainButtonDef>
         <defName>Production</defName>
         <label>Production</label>
-        <description>Open the production management interface.</description>
+        <description>ProductionDesc</description>
         <workerClass>CorvusProductionUI.MainButtonWorker_ProductionUI</workerClass>
         <order>75</order>
         <minimized>False</minimized>
