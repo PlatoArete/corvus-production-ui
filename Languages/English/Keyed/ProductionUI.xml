@@ -6,9 +6,11 @@
 
     <!-- Window Title -->
     <ProductionWindowTitle>Production Management</ProductionWindowTitle>
+    <ProductionWindowTitleWithCount>Production Planner ({0} recipes found)</ProductionWindowTitleWithCount>
 
     <!-- Filter Labels -->
     <FilterBySearch>Search recipes...</FilterBySearch>
+    <FilterBySearchLabel>Search</FilterBySearchLabel>
     <FilterByCategory>Category</FilterByCategory>
     <FilterByMod>Source</FilterByMod>
     <FilterByWorkstation>Workstation</FilterByWorkstation>
@@ -48,6 +50,9 @@
     <WorkstationUnavailable>{0}</WorkstationUnavailable>
 
     <!-- Bill Management -->
+    <RecipesHeader>Recipes</RecipesHeader>
+    <BillsHeader>Bills</BillsHeader>
+    <NoBillsFound>No bills found</NoBillsFound>
     <AddBill>Add Bill</AddBill>
     <BillDetails>Details...</BillDetails>
     <DeleteBill>Delete</DeleteBill>

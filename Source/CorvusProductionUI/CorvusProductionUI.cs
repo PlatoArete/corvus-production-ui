@@ -57,9 +57,9 @@ namespace CorvusProductionUI
 
         private string GetRecipeCategory(RecipeDef recipe)
         {
-            if (recipe.products?.Any() == true)
+            var product = GetPrimaryProductDef(recipe);
+            if (product != null)
             {
-                var product = recipe.products.First().thingDef;
                 if (product.IsWeapon) 
                 {
                     if (product.IsRangedWeapon) return "CategoryRangedWeapons".Translate();
@@ -75,20 +75,45 @@ namespace CorvusProductionUI
             return "CategoryOther".Translate();
         }
 
+        private ThingDef GetPrimaryProductDef(RecipeDef recipe)
+        {
+            if (recipe == null)
+            {
+                return null;
+            }
+
+            if (recipe.ProducedThingDef != null)
+            {
+                return recipe.ProducedThingDef;
+            }
+
+            return recipe.products?
+                .Select(product => product?.thingDef)
+                .FirstOrDefault(thingDef => thingDef != null);
+        }
+
+        private bool IsBillGiverDef(ThingDef thingDef)
+        {
+            return thingDef?.thingClass != null && typeof(IBillGiver).IsAssignableFrom(thingDef.thingClass);
+        }
+
         private ThingDef GetWorkbenchForRecipe(RecipeDef recipe)
         {
-            if (recipe.recipeUsers?.Any() == true)
+            var directWorkbench = recipe.AllRecipeUsers?.FirstOrDefault(IsBillGiverDef);
+            if (directWorkbench != null)
             {
-                return recipe.recipeUsers.First();
+                return directWorkbench;
             }
-            return DefDatabase<ThingDef>.AllDefs.FirstOrDefault(t => 
-                t.recipes?.Contains(recipe) == true);
+
+            return DefDatabase<ThingDef>.AllDefs.FirstOrDefault(t =>
+                IsBillGiverDef(t) && t.recipes?.Contains(recipe) == true);
         }
 
         private bool HasWorkbench()
         {
             if (workbenchDef == null) return false;
-            return Find.CurrentMap?.listerThings?.ThingsOfDef(workbenchDef)?.Any() == true;
+            return Find.CurrentMap?.listerThings?.ThingsOfDef(workbenchDef)?
+                .Any(thing => thing is IBillGiver billGiver && billGiver.CurrentlyUsableForBills()) == true;
         }
 
         private bool HasMaterials()
@@ -133,7 +158,7 @@ namespace CorvusProductionUI
             
             foreach (var workbench in workbenches)
             {
-                if (workbench is IBillGiver billGiver)
+                if (workbench is IBillGiver billGiver && billGiver.CurrentlyUsableForBills())
                 {
                     int billCount = billGiver.BillStack.Count;
                     if (billCount < fewestBills)
@@ -308,11 +333,11 @@ namespace CorvusProductionUI
             switch (availabilityFilter)
             {
                 case AvailabilityFilter.Available:
-                    return recipeInfo.hasWorkbench && recipeInfo.hasMaterials;
+                    return recipeInfo.CanCreateBill() && recipeInfo.hasMaterials;
                 case AvailabilityFilter.NoMaterials:
-                    return recipeInfo.hasWorkbench && !recipeInfo.hasMaterials;
+                    return recipeInfo.CanCreateBill() && !recipeInfo.hasMaterials;
                 case AvailabilityFilter.NoWorkbench:
-                    return !recipeInfo.hasWorkbench;
+                    return !recipeInfo.CanCreateBill();
             }
 
             return true;
@@ -375,12 +400,19 @@ namespace CorvusProductionUI
 
         public override void DoWindowContents(Rect inRect)
         {
+            var oldFont = Text.Font;
+            var oldAnchor = Text.Anchor;
+            var oldWordWrap = Text.WordWrap;
+            var oldColor = GUI.color;
+
+            try
+            {
             var rect = inRect.ContractedBy(10f);
             
             // Title
             var titleRect = new Rect(rect.x, rect.y, rect.width, 30f);
             Text.Font = GameFont.Medium;
-            Widgets.Label(titleRect, $"Production Planner ({filteredRecipes.Count} recipes found)");
+            Widgets.Label(titleRect, "ProductionWindowTitleWithCount".Translate(filteredRecipes.Count));
             
             // Filter controls with improved layout
             var filterY = titleRect.yMax + 15f;
@@ -400,19 +432,19 @@ namespace CorvusProductionUI
             Text.Font = GameFont.Tiny;
             
             var workstationLabelRect = new Rect(rect.x, filterY, workstationWidth, labelHeight);
-            Widgets.Label(workstationLabelRect, "Workstation:");
+            Widgets.Label(workstationLabelRect, "FilterByWorkstation".Translate());
             
             var categoryLabelRect = new Rect(workstationLabelRect.xMax + spacing, filterY, categoryWidth, labelHeight);
-            Widgets.Label(categoryLabelRect, "Type:");
+            Widgets.Label(categoryLabelRect, "FilterByCategory".Translate());
             
             var availabilityLabelRect = new Rect(categoryLabelRect.xMax + spacing, filterY, availabilityWidth, labelHeight);
-            Widgets.Label(availabilityLabelRect, "Availability:");
+            Widgets.Label(availabilityLabelRect, "FilterByAvailability".Translate());
             
             var modLabelRect = new Rect(availabilityLabelRect.xMax + spacing, filterY, sourceWidth, labelHeight);
-            Widgets.Label(modLabelRect, "Source:");
+            Widgets.Label(modLabelRect, "FilterByMod".Translate());
             
             var searchLabelRect = new Rect(modLabelRect.xMax + spacing, filterY, searchWidth, labelHeight);
-            Widgets.Label(searchLabelRect, "Search:");
+            Widgets.Label(searchLabelRect, "FilterBySearchLabel".Translate());
             
             Text.Font = GameFont.Small; // Reset font
             
@@ -473,7 +505,7 @@ namespace CorvusProductionUI
             
             // Reset button (aligned to the right)
             var resetRect = new Rect(searchRect.xMax + spacing, controlsY, 90f, filterHeight);
-            if (Widgets.ButtonText(resetRect, "Reset".Translate()))
+            if (Widgets.ButtonText(resetRect, "ResetFilters".Translate()))
             {
                 ResetAllFilters();
             }
@@ -489,6 +521,14 @@ namespace CorvusProductionUI
             // Bill list (right 40%)
             var billListRect = new Rect(rect.x + rect.width * 0.6f + 5f, remainingY, rect.width * 0.4f - 5f, remainingHeight);
             DrawBillList(billListRect);
+            }
+            finally
+            {
+                Text.Font = oldFont;
+                Text.Anchor = oldAnchor;
+                Text.WordWrap = oldWordWrap;
+                GUI.color = oldColor;
+            }
         }
 
         private void DrawRecipeList(Rect rect)
@@ -497,7 +537,7 @@ namespace CorvusProductionUI
             
             // Header
             var headerRect = new Rect(rect.x, rect.y, rect.width, 25f);
-            Widgets.Label(headerRect, "Recipes");
+            Widgets.Label(headerRect, "RecipesHeader".Translate());
             
             // List area
             var listRect = new Rect(rect.x, rect.y + 30f, rect.width, rect.height - 30f);
@@ -548,7 +588,7 @@ namespace CorvusProductionUI
             
             // Workbench (second row)
             var workbenchRect = new Rect(innerRect.x, innerRect.y + 22f, innerRect.width * 0.5f, 18f);
-            var workbenchText = recipeInfo.workbenchDef?.label ?? "Unknown";
+            var workbenchText = recipeInfo.workbenchDef?.label ?? "SourceUnknown".Translate().ToString();
             GUI.color = recipeInfo.hasWorkbench ? Color.green : Color.red;
             Widgets.Label(workbenchRect, workbenchText);
             GUI.color = Color.white;
@@ -574,16 +614,17 @@ namespace CorvusProductionUI
             // Add Bill button (right side, centered vertically)
             var addBillRect = new Rect(innerRect.xMax - 80f, innerRect.y + 25f, 75f, 30f);
             var canCreateBill = recipeInfo.CanCreateBill();
+            Text.Anchor = TextAnchor.UpperLeft;
+            Text.WordWrap = true;
             
             if (!canCreateBill)
             {
                 GUI.color = Color.gray;
             }
             
-            if (Widgets.ButtonText(addBillRect, "Add Bill".Translate()) && canCreateBill)
+            if (Widgets.ButtonText(addBillRect, "AddBill".Translate()) && canCreateBill)
             {
                 recipeInfo.CreateBill(1, CustomRepeatMode.DoXTimes);
-                Messages.Message($"Added bill: {recipe.label}", MessageTypeDefOf.PositiveEvent);
             }
             
             GUI.color = Color.white;
@@ -637,7 +678,12 @@ namespace CorvusProductionUI
                 skills.Add($"Work: {recipe.workAmount}");
             }
             
-            return skills.Any() ? string.Join(", ", skills) : "No skill requirements".Translate();
+            if (skills.Any())
+            {
+                return string.Join(", ", skills);
+            }
+
+            return "No skill requirements".Translate().ToString();
         }
 
         private void DrawBillList(Rect rect)
@@ -646,7 +692,7 @@ namespace CorvusProductionUI
             
             // Header
             var headerRect = new Rect(rect.x, rect.y, rect.width, 25f);
-            Widgets.Label(headerRect, "Bills");
+            Widgets.Label(headerRect, "BillsHeader".Translate());
             
             // Get relevant bills
             var relevantBills = GetRelevantBills();
@@ -658,7 +704,7 @@ namespace CorvusProductionUI
             {
                 var noBillsRect = new Rect(listRect.x + 10f, listRect.y + 10f, listRect.width - 20f, 30f);
                 GUI.color = Color.gray;
-                Widgets.Label(noBillsRect, "No bills found".Translate());
+                Widgets.Label(noBillsRect, "NoBillsFound".Translate());
                 GUI.color = Color.white;
                 return;
             }
@@ -685,6 +731,7 @@ namespace CorvusProductionUI
             var relevantBills = new List<BillInfo>();
             
             if (Find.CurrentMap?.listerThings == null) return relevantBills;
+            var filteredRecipeDefs = new HashSet<RecipeDef>(filteredRecipes.Select(r => r.recipe));
             
             // Get all workbenches that can make the currently filtered recipes
             var relevantWorkbenches = new HashSet<Thing>();
@@ -709,7 +756,7 @@ namespace CorvusProductionUI
                 if (workbench is IBillGiver billGiver)
                 {
                     var bills = billGiver.BillStack.Bills
-                        .Where(b => filteredRecipes.Any(r => r.recipe == b.recipe))
+                        .Where(b => filteredRecipeDefs.Contains(b.recipe))
                         .ToList();
                     workbenchBills[workbench] = bills;
                     maxBillCount = Math.Max(maxBillCount, bills.Count);
@@ -789,7 +836,7 @@ namespace CorvusProductionUI
             
             // Details button
             var detailsRect = new Rect(modeRect.xMax + 10f, controlsY, 60f, 25f);
-            if (Widgets.ButtonText(detailsRect, "Details".Translate()))
+            if (Widgets.ButtonText(detailsRect, "BillDetails".Translate()))
             {
                 if (bill is Bill_Production productionBill)
                 {
@@ -811,12 +858,12 @@ namespace CorvusProductionUI
 
         private string GetBillCountText(Bill bill)
         {
-            if (!(bill is Bill_Production productionBill)) return "1".Translate();
-            
-            if (productionBill.repeatMode == BillRepeatModeDefOf.Forever) return "RepeatForever".Translate();
-            if (productionBill.repeatMode == BillRepeatModeDefOf.RepeatCount) return "RepeatCount".Translate(productionBill.repeatCount);
-            if (productionBill.repeatMode == BillRepeatModeDefOf.TargetCount) return "RepeatTarget".Translate(productionBill.targetCount);
-            return "1".Translate();
+            if (!(bill is Bill_Production productionBill)) return "1";
+
+            if (productionBill.repeatMode == BillRepeatModeDefOf.Forever) return "-";
+            if (productionBill.repeatMode == BillRepeatModeDefOf.RepeatCount) return productionBill.repeatCount.ToString();
+            if (productionBill.repeatMode == BillRepeatModeDefOf.TargetCount) return productionBill.targetCount.ToString();
+            return "1";
         }
 
         private string GetBillModeText(Bill bill)
