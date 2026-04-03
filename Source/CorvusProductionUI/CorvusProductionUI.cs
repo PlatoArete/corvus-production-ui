@@ -44,10 +44,12 @@ namespace CorvusProductionUI
         public bool hasMaterials;
         public ThingDef workbenchDef;
         public string modSource;
+        public ThingDef primaryProductDef;
 
         public RecipeInfo(RecipeDef recipe)
         {
             this.recipe = recipe;
+            this.primaryProductDef = GetPrimaryProductDef(recipe);
             this.category = GetRecipeCategory(recipe);
             this.workbenchDef = GetWorkbenchForRecipe(recipe);
             this.hasWorkbench = HasWorkbench();
@@ -224,15 +226,18 @@ namespace CorvusProductionUI
         private readonly List<string> categories;
         private List<string> availableMods;
         private List<string> availableWorkstations;
+        private readonly Dictionary<string, float> hoverStates = new Dictionary<string, float>();
 
         public ProductionWindow()
         {
             this.forcePause = false;
             this.draggable = true;
-            this.doCloseX = true;
+            this.doCloseX = false;
             this.doCloseButton = false;
             this.closeOnClickedOutside = false;
             this.absorbInputAroundWindow = true;
+            this.doWindowBackground = false;
+            this.drawShadow = false;
             
             // Initialize categories with translations
             categories = new List<string> 
@@ -253,7 +258,21 @@ namespace CorvusProductionUI
             FilterRecipes();
         }
 
-        public override Vector2 InitialSize => new Vector2(1000f, 700f);
+        public override Vector2 InitialSize
+        {
+            get
+            {
+                float maxWidth = Mathf.Max(900f, Verse.UI.screenWidth - 40f);
+                float maxHeight = Mathf.Max(620f, Verse.UI.screenHeight - 70f);
+
+                float targetWidth = Mathf.Clamp(Verse.UI.screenWidth * 0.88f, 1000f, 1180f);
+                float targetHeight = Mathf.Clamp(Verse.UI.screenHeight * 0.82f, 700f, 820f);
+
+                return new Vector2(
+                    Mathf.Min(targetWidth, maxWidth),
+                    Mathf.Min(targetHeight, maxHeight));
+            }
+        }
 
         private void LoadRecipes()
         {
@@ -398,6 +417,17 @@ namespace CorvusProductionUI
             }
         }
 
+        private int GetActiveFilterCount()
+        {
+            int count = 0;
+            if (!string.IsNullOrEmpty(searchText)) count++;
+            if (selectedCategory != "CategoryAll".Translate()) count++;
+            if (selectedMod != "SourceAll".Translate()) count++;
+            if (selectedWorkstation != "WorkstationAll".Translate()) count++;
+            if (availabilityFilter != AvailabilityFilter.Available) count++;
+            return count;
+        }
+
         public override void DoWindowContents(Rect inRect)
         {
             var oldFont = Text.Font;
@@ -407,71 +437,95 @@ namespace CorvusProductionUI
 
             try
             {
-            var rect = inRect.ContractedBy(10f);
-            
-            // Title
-            var titleRect = new Rect(rect.x, rect.y, rect.width, 30f);
+            CorvusStyle.DrawWindowBackground(inRect);
+            var rect = inRect.ContractedBy(12f);
+
+            var titleRect = new Rect(rect.x, rect.y, rect.width - 140f, 30f);
+            GUI.color = CorvusStyle.TextPrimary;
             Text.Font = GameFont.Medium;
             Widgets.Label(titleRect, "ProductionWindowTitleWithCount".Translate(filteredRecipes.Count));
-            
-            // Filter controls with improved layout
-            var filterY = titleRect.yMax + 15f;
+
+            var tagRect = new Rect(rect.xMax - 116f, rect.y + 4f, 76f, 18f);
+            float tagHover = GetHoverAmount("header_tag", Mouse.IsOver(tagRect));
+            CorvusStyle.DrawHeaderTag(tagRect, "COG OPS", tagHover);
+            TooltipHandler.TipRegion(tagRect, "Corvus Operations Group");
+
+            var closeRect = new Rect(rect.xMax - 28f, rect.y + 1f, 24f, 24f);
+            float closeHover = GetHoverAmount("window_close", Mouse.IsOver(closeRect));
+            if (CorvusStyle.DrawIconButton(closeRect, "×", closeHover, true, false))
+            {
+                Close();
+                return;
+            }
+            TooltipHandler.TipRegion(closeRect, "Close");
+
+            var filterY = titleRect.yMax + 12f;
             var labelHeight = 18f;
             var filterHeight = 28f;
-            var spacing = 15f;
-            
-            // Calculate proportional widths for better balance
+            var spacing = 10f;
+            int activeFilterCount = GetActiveFilterCount();
+
             var totalFilterWidth = rect.width - 120f; // Reserve space for reset button
-            var workstationWidth = totalFilterWidth * 0.20f; // 20%
-            var categoryWidth = totalFilterWidth * 0.15f;    // 15%
-            var availabilityWidth = totalFilterWidth * 0.18f; // 18%
-            var sourceWidth = totalFilterWidth * 0.20f;      // 20%
-            var searchWidth = totalFilterWidth * 0.22f;      // 22%
-            
-            // Filter labels - smaller font for cleaner look
+            var workstationWidth = totalFilterWidth * 0.20f;
+            var categoryWidth = totalFilterWidth * 0.15f;
+            var availabilityWidth = totalFilterWidth * 0.18f;
+            var sourceWidth = totalFilterWidth * 0.20f;
+            var searchWidth = totalFilterWidth * 0.22f;
+
+            var filterPanelRect = new Rect(rect.x, filterY - 8f, rect.width, labelHeight + filterHeight + 44f);
+            CorvusStyle.DrawPanel(filterPanelRect);
+
+            var filterHeaderRect = new Rect(filterPanelRect.x + 12f, filterPanelRect.y + 6f, filterPanelRect.width - 24f, 20f);
+            CorvusStyle.DrawSectionHeader(filterHeaderRect, "Filters");
+
+            if (activeFilterCount > 0)
+            {
+                var activeChipRect = new Rect(filterPanelRect.xMax - 78f, filterPanelRect.y + 6f, 66f, 18f);
+                CorvusStyle.DrawBadge(activeChipRect, $"{activeFilterCount} ACTIVE", CorvusStyle.Accent);
+            }
+
             Text.Font = GameFont.Tiny;
-            
-            var workstationLabelRect = new Rect(rect.x, filterY, workstationWidth, labelHeight);
+            var workstationLabelRect = new Rect(rect.x + 12f, filterY + 20f, workstationWidth, labelHeight);
+            GUI.color = CorvusStyle.TextSecondary;
             Widgets.Label(workstationLabelRect, "FilterByWorkstation".Translate());
             
             var categoryLabelRect = new Rect(workstationLabelRect.xMax + spacing, filterY, categoryWidth, labelHeight);
+            categoryLabelRect.y = workstationLabelRect.y;
             Widgets.Label(categoryLabelRect, "FilterByCategory".Translate());
             
             var availabilityLabelRect = new Rect(categoryLabelRect.xMax + spacing, filterY, availabilityWidth, labelHeight);
+            availabilityLabelRect.y = workstationLabelRect.y;
             Widgets.Label(availabilityLabelRect, "FilterByAvailability".Translate());
             
             var modLabelRect = new Rect(availabilityLabelRect.xMax + spacing, filterY, sourceWidth, labelHeight);
+            modLabelRect.y = workstationLabelRect.y;
             Widgets.Label(modLabelRect, "FilterByMod".Translate());
             
             var searchLabelRect = new Rect(modLabelRect.xMax + spacing, filterY, searchWidth, labelHeight);
+            searchLabelRect.y = workstationLabelRect.y;
             Widgets.Label(searchLabelRect, "FilterBySearchLabel".Translate());
             
-            Text.Font = GameFont.Small; // Reset font
-            
-            // Filter controls with better spacing
-            var controlsY = filterY + labelHeight + 8f;
-            
-            // Workstation dropdown
-            var workstationRect = new Rect(rect.x, controlsY, workstationWidth, filterHeight);
-            if (Widgets.ButtonText(workstationRect, selectedWorkstation))
+            Text.Font = GameFont.Small;
+            var controlsY = workstationLabelRect.y + labelHeight + 6f;
+
+            var workstationRect = new Rect(rect.x + 12f, controlsY, workstationWidth, filterHeight);
+            if (CorvusStyle.DrawButton(workstationRect, selectedWorkstation, GetHoverAmount("filter_workstation", Mouse.IsOver(workstationRect))))
             {
                 var workstationOptions = availableWorkstations.Select(w => 
                     new FloatMenuOption(w, () => { selectedWorkstation = w; FilterRecipes(); })).ToList();
                 Find.WindowStack.Add(new FloatMenu(workstationOptions));
             }
             
-            // Category dropdown
             var categoryRect = new Rect(workstationRect.xMax + spacing, controlsY, categoryWidth, filterHeight);
-            if (Widgets.ButtonText(categoryRect, selectedCategory))
+            if (CorvusStyle.DrawButton(categoryRect, selectedCategory, GetHoverAmount("filter_category", Mouse.IsOver(categoryRect))))
             {
                 var floatMenu = new FloatMenu(categories.Select(c => 
                     new FloatMenuOption(c, () => { selectedCategory = c; FilterRecipes(); })).ToList());
                 Find.WindowStack.Add(floatMenu);
             }
 
-            // Availability dropdown
             var availabilityRect = new Rect(categoryRect.xMax + spacing, controlsY, availabilityWidth, filterHeight);
-            if (Widgets.ButtonText(availabilityRect, GetAvailabilityDisplayName(availabilityFilter)))
+            if (CorvusStyle.DrawButton(availabilityRect, GetAvailabilityDisplayName(availabilityFilter), GetHoverAmount("filter_availability", Mouse.IsOver(availabilityRect)), true, availabilityFilter != AvailabilityFilter.Available))
             {
                 var options = new List<FloatMenuOption>();
                 foreach (AvailabilityFilter filter in System.Enum.GetValues(typeof(AvailabilityFilter)))
@@ -485,17 +539,16 @@ namespace CorvusProductionUI
                 Find.WindowStack.Add(new FloatMenu(options));
             }
             
-            // Mod dropdown
             var modRect = new Rect(availabilityRect.xMax + spacing, controlsY, sourceWidth, filterHeight);
-            if (Widgets.ButtonText(modRect, selectedMod))
+            if (CorvusStyle.DrawButton(modRect, selectedMod, GetHoverAmount("filter_mod", Mouse.IsOver(modRect))))
             {
                 var modOptions = availableMods.Select(m => 
                     new FloatMenuOption(m, () => { selectedMod = m; FilterRecipes(); })).ToList();
                 Find.WindowStack.Add(new FloatMenu(modOptions));
             }
 
-            // Search box
             var searchRect = new Rect(modRect.xMax + spacing, controlsY, searchWidth, filterHeight);
+            CorvusStyle.DrawPanel(searchRect, true);
             var newSearchText = Widgets.TextField(searchRect, searchText);
             if (newSearchText != searchText)
             {
@@ -503,23 +556,30 @@ namespace CorvusProductionUI
                 FilterRecipes();
             }
             
-            // Reset button (aligned to the right)
             var resetRect = new Rect(searchRect.xMax + spacing, controlsY, 90f, filterHeight);
-            if (Widgets.ButtonText(resetRect, "ResetFilters".Translate()))
+            if (CorvusStyle.DrawButton(resetRect, "ResetFilters".Translate(), GetHoverAmount("filter_reset", Mouse.IsOver(resetRect))))
             {
                 ResetAllFilters();
             }
 
-            // Split the remaining area 60/40 with better spacing
+            var summaryY = controlsY + filterHeight + 8f;
+            var summaryRect = new Rect(filterPanelRect.x + 12f, summaryY, filterPanelRect.width - 24f, 18f);
+            GUI.color = CorvusStyle.TextMuted;
+            Text.Font = GameFont.Tiny;
+            Widgets.Label(summaryRect, activeFilterCount > 0
+                ? $"Active filters narrow the recipe list to {filteredRecipes.Count} entries."
+                : "Default view shows recipes with available workbench and materials.");
+
             var remainingHeight = rect.height - (controlsY + filterHeight + 20f);
-            var remainingY = controlsY + filterHeight + 15f;
-            
-            // Recipe list (left 60%)
-            var recipeListRect = new Rect(rect.x, remainingY, rect.width * 0.6f - 5f, remainingHeight);
+            var remainingY = filterPanelRect.yMax + 10f;
+            remainingHeight = rect.height - (remainingY - rect.y);
+            var paneGap = 8f;
+            var recipeListRect = new Rect(rect.x, remainingY, rect.width * 0.58f - paneGap * 0.5f, remainingHeight);
+            CorvusStyle.DrawPanel(recipeListRect);
             DrawRecipeList(recipeListRect);
             
-            // Bill list (right 40%)
-            var billListRect = new Rect(rect.x + rect.width * 0.6f + 5f, remainingY, rect.width * 0.4f - 5f, remainingHeight);
+            var billListRect = new Rect(recipeListRect.xMax + paneGap, remainingY, rect.xMax - (recipeListRect.xMax + paneGap), remainingHeight);
+            CorvusStyle.DrawPanel(billListRect);
             DrawBillList(billListRect);
             }
             finally
@@ -535,17 +595,15 @@ namespace CorvusProductionUI
         {
             Text.Font = GameFont.Small;
             
-            // Header
-            var headerRect = new Rect(rect.x, rect.y, rect.width, 25f);
-            Widgets.Label(headerRect, "RecipesHeader".Translate());
+            var headerRect = new Rect(rect.x + 12f, rect.y + 8f, rect.width - 24f, 25f);
+            CorvusStyle.DrawSectionHeader(headerRect, "RecipesHeader".Translate());
             
-            // List area
-            var listRect = new Rect(rect.x, rect.y + 30f, rect.width, rect.height - 30f);
-            var itemHeight = 95f; // Increased height for ingredients and skills
+            var listRect = new Rect(rect.x + 8f, rect.y + 36f, rect.width - 16f, rect.height - 44f);
+            var itemHeight = 104f;
             var contentHeight = filteredRecipes.Count * itemHeight;
             var viewRect = new Rect(0f, 0f, listRect.width - 20f, contentHeight);
             
-            Widgets.BeginScrollView(listRect, ref scrollPosition, viewRect);
+            CorvusStyle.BeginStyledScrollView(listRect, ref scrollPosition, viewRect);
             
             var curY = 0f;
             foreach (var recipeInfo in filteredRecipes)
@@ -555,77 +613,94 @@ namespace CorvusProductionUI
                 curY += itemHeight;
             }
             
-            Widgets.EndScrollView();
+            CorvusStyle.EndStyledScrollView();
         }
 
         private void DrawRecipeItem(Rect rect, RecipeInfo recipeInfo)
         {
-            // Background
-            if (Mouse.IsOver(rect))
-            {
-                Widgets.DrawHighlight(rect);
-            }
-            Widgets.DrawBox(rect);
+            float hover = GetHoverAmount("recipe_" + recipeInfo.recipe.defName, Mouse.IsOver(rect));
+            CorvusStyle.DrawListRow(rect, hover);
 
             var recipe = recipeInfo.recipe;
-            var innerRect = rect.ContractedBy(5f);
+            var innerRect = rect.ContractedBy(8f);
             
-            // Recipe name with info button
-            var nameRect = new Rect(innerRect.x, innerRect.y, innerRect.width * 0.35f, 20f);
+            string sourceText = recipeInfo.modSource;
+            var addBillRect = new Rect(innerRect.xMax - 32f, innerRect.y + 20f, 28f, 28f);
+
+            float titleX = innerRect.x;
+            if (recipeInfo.primaryProductDef != null)
+            {
+                var productIconRect = new Rect(innerRect.x, innerRect.y + 1f, 18f, 18f);
+                Widgets.DefIcon(productIconRect, recipeInfo.primaryProductDef);
+                TooltipHandler.TipRegion(productIconRect, recipeInfo.primaryProductDef.LabelCap);
+                titleX = productIconRect.xMax + 6f;
+            }
+
+            var nameRect = new Rect(titleX, innerRect.y, innerRect.width - 180f - (titleX - innerRect.x), 20f);
+            GUI.color = CorvusStyle.TextPrimary;
             Widgets.Label(nameRect, recipe.label.CapitalizeFirst());
             
-            // Info button (to the right of recipe name)
             var infoButtonRect = new Rect(nameRect.xMax + 5f, innerRect.y - 2f, 24f, 24f);
             var producedThing = recipe.ProducedThingDef;
             if (producedThing != null && Widgets.InfoCardButton(infoButtonRect, producedThing))
             {
-                // InfoCardButton handles opening the info card automatically
             }
             
-            // Category
-            var categoryRect = new Rect(infoButtonRect.xMax + 5f, innerRect.y, 90f, 20f);
-            Widgets.Label(categoryRect, recipeInfo.category);
+            var categoryRect = new Rect(innerRect.x, innerRect.y + 24f, 92f, 18f);
+            CorvusStyle.DrawBadge(categoryRect, recipeInfo.category, CorvusStyle.AccentDim);
+
+            var stateLabel = recipeInfo.hasWorkbench
+                ? (recipeInfo.hasMaterials ? "READY" : "NO MAT")
+                : "NO BENCH";
+            var stateColor = recipeInfo.hasWorkbench
+                ? (recipeInfo.hasMaterials ? CorvusStyle.Success : CorvusStyle.Warning)
+                : CorvusStyle.Danger;
+            var stateRect = new Rect(addBillRect.x - 78f, innerRect.y + 24f, 70f, 18f);
+            CorvusStyle.DrawBadge(stateRect, stateLabel, stateColor);
+
+            var sourceRect = new Rect(categoryRect.xMax + 8f, innerRect.y + 25f, stateRect.x - (categoryRect.xMax + 14f), 16f);
+            GUI.color = CorvusStyle.TextMuted;
+            Text.Font = GameFont.Tiny;
+            Widgets.Label(sourceRect, sourceText);
             
-            // Workbench (second row)
-            var workbenchRect = new Rect(innerRect.x, innerRect.y + 22f, innerRect.width * 0.5f, 18f);
+            var dividerRect = new Rect(innerRect.x, innerRect.y + 47f, innerRect.width, 1f);
+            CorvusStyle.DrawSeparator(dividerRect);
+
+            var workbenchRect = new Rect(innerRect.x, innerRect.y + 54f, innerRect.width * 0.52f, 16f);
             var workbenchText = recipeInfo.workbenchDef?.label ?? "SourceUnknown".Translate().ToString();
-            GUI.color = recipeInfo.hasWorkbench ? Color.green : Color.red;
-            Widgets.Label(workbenchRect, workbenchText);
-            GUI.color = Color.white;
+            GUI.color = CorvusStyle.TextMuted;
+            Widgets.Label(new Rect(workbenchRect.x, workbenchRect.y, 52f, 16f), "BENCH");
+            GUI.color = recipeInfo.hasWorkbench ? CorvusStyle.Success : CorvusStyle.Warning;
+            Widgets.Label(new Rect(workbenchRect.x + 50f, workbenchRect.y, workbenchRect.width - 50f, 16f), workbenchText);
             
-            // Ingredients (third row)
-            var ingredientsY = innerRect.y + 42f;
-            var ingredientsRect = new Rect(innerRect.x, ingredientsY, innerRect.width * 0.7f, 16f);
+            var ingredientsRect = new Rect(innerRect.x + innerRect.width * 0.52f, innerRect.y + 54f, innerRect.width * 0.48f, 16f);
             Text.Font = GameFont.Tiny;
             var ingredientsText = GetIngredientsText(recipe);
-            GUI.color = Color.gray;
-            Widgets.Label(ingredientsRect, ingredientsText);
-            GUI.color = Color.white;
+            GUI.color = CorvusStyle.TextMuted;
+            Widgets.Label(new Rect(ingredientsRect.x, ingredientsRect.y, 58f, 16f), "INPUTS");
+            float iconStripWidth = DrawIngredientIcons(recipe, ingredientsRect.x + 52f, ingredientsRect.y, 44f);
+            GUI.color = CorvusStyle.TextSecondary;
+            Widgets.Label(new Rect(ingredientsRect.x + 52f + iconStripWidth, ingredientsRect.y, ingredientsRect.width - 52f - iconStripWidth, 16f), ingredientsText);
             
-            // Skills (fourth row)
-            var skillsY = innerRect.y + 60f;
-            var skillsRect = new Rect(innerRect.x, skillsY, innerRect.width * 0.7f, 16f);
+            var skillsRect = new Rect(innerRect.x, innerRect.y + 72f, innerRect.width - 42f, 16f);
             var skillsText = GetSkillsText(recipe);
-            GUI.color = Color.gray;
-            Widgets.Label(skillsRect, skillsText);
-            GUI.color = Color.white;
-            Text.Font = GameFont.Small; // Reset font
+            GUI.color = CorvusStyle.TextMuted;
+            Widgets.Label(new Rect(skillsRect.x, skillsRect.y, 52f, 16f), "WORK");
+            GUI.color = CorvusStyle.TextSecondary;
+            Widgets.Label(new Rect(skillsRect.x + 44f, skillsRect.y, skillsRect.width - 44f, 16f), skillsText);
+            Text.Font = GameFont.Small;
             
-            // Add Bill button (right side, centered vertically)
-            var addBillRect = new Rect(innerRect.xMax - 80f, innerRect.y + 25f, 75f, 30f);
             var canCreateBill = recipeInfo.CanCreateBill();
-            Text.Anchor = TextAnchor.UpperLeft;
-            Text.WordWrap = true;
-            
-            if (!canCreateBill)
-            {
-                GUI.color = Color.gray;
-            }
-            
-            if (Widgets.ButtonText(addBillRect, "AddBill".Translate()) && canCreateBill)
+            float addHover = GetHoverAmount("recipe_add_" + recipeInfo.recipe.defName, Mouse.IsOver(addBillRect));
+            if (CorvusStyle.DrawIconButton(addBillRect, "+", addHover, canCreateBill, canCreateBill && recipeInfo.hasMaterials) && canCreateBill)
             {
                 recipeInfo.CreateBill(1, CustomRepeatMode.DoXTimes);
             }
+
+            string addTooltip = canCreateBill
+                ? "TooltipAddBill".Translate()
+                : "MessageNoWorkbenchForBill".Translate();
+            TooltipHandler.TipRegion(addBillRect, addTooltip);
             
             GUI.color = Color.white;
         }
@@ -655,6 +730,77 @@ namespace CorvusProductionUI
             }
             
             return string.Join(", ", ingredients);
+        }
+
+        private ThingDef GetCyclingIngredientIconDef(IngredientCount ingredient, int ingredientIndex)
+        {
+            if (ingredient?.filter?.AllowedThingDefs == null)
+            {
+                return null;
+            }
+
+            var defs = ingredient.filter.AllowedThingDefs
+                .Where(def => def != null)
+                .OrderBy(def => def.defName)
+                .ToList();
+
+            if (defs.Count == 0)
+            {
+                return null;
+            }
+
+            if (defs.Count == 1)
+            {
+                return defs[0];
+            }
+
+            int tick = Mathf.FloorToInt(Time.realtimeSinceStartup * 0.75f);
+            int index = Mathf.Abs(tick + ingredientIndex) % defs.Count;
+            return defs[index];
+        }
+
+        private float DrawIngredientIcons(RecipeDef recipe, float startX, float y, float maxWidth)
+        {
+            if (recipe.ingredients?.Any() != true)
+            {
+                return 0f;
+            }
+
+            const float iconSize = 14f;
+            const float spacing = 2f;
+            float x = startX;
+            int drawnIcons = 0;
+
+            int ingredientIndex = 0;
+            foreach (var ingredient in recipe.ingredients.Take(2))
+            {
+                ThingDef iconDef = GetCyclingIngredientIconDef(ingredient, ingredientIndex);
+                if (iconDef == null) continue;
+
+                if (x + iconSize > startX + maxWidth)
+                {
+                    break;
+                }
+
+                Rect iconRect = new Rect(x, y + 1f, iconSize, iconSize);
+                Widgets.DefIcon(iconRect, iconDef);
+                TooltipHandler.TipRegion(iconRect, iconDef.LabelCap);
+                x += iconSize + spacing;
+                drawnIcons++;
+                ingredientIndex++;
+            }
+
+            int extraCount = (recipe.ingredients?.Count ?? 0) - drawnIcons;
+            if (extraCount > 0 && x + 16f <= startX + maxWidth)
+            {
+                Text.Font = GameFont.Tiny;
+                GUI.color = CorvusStyle.TextMuted;
+                Widgets.Label(new Rect(x, y, 16f, 16f), $"+{extraCount}");
+                GUI.color = Color.white;
+                x += 16f + spacing;
+            }
+
+            return Mathf.Max(0f, x - startX + 4f);
         }
 
         private string GetSkillsText(RecipeDef recipe)
@@ -690,30 +836,27 @@ namespace CorvusProductionUI
         {
             Text.Font = GameFont.Small;
             
-            // Header
-            var headerRect = new Rect(rect.x, rect.y, rect.width, 25f);
-            Widgets.Label(headerRect, "BillsHeader".Translate());
+            var headerRect = new Rect(rect.x + 12f, rect.y + 8f, rect.width - 24f, 25f);
+            CorvusStyle.DrawSectionHeader(headerRect, "BillsHeader".Translate());
             
-            // Get relevant bills
             var relevantBills = GetRelevantBills();
             
-            // List area
-            var listRect = new Rect(rect.x, rect.y + 30f, rect.width, rect.height - 30f);
+            var listRect = new Rect(rect.x + 8f, rect.y + 36f, rect.width - 16f, rect.height - 44f);
             
             if (relevantBills.Count == 0)
             {
                 var noBillsRect = new Rect(listRect.x + 10f, listRect.y + 10f, listRect.width - 20f, 30f);
-                GUI.color = Color.gray;
+                GUI.color = CorvusStyle.TextMuted;
                 Widgets.Label(noBillsRect, "NoBillsFound".Translate());
                 GUI.color = Color.white;
                 return;
             }
             
-            var itemHeight = 85f;
+            var itemHeight = 94f;
             var contentHeight = relevantBills.Count * itemHeight;
             var viewRect = new Rect(0f, 0f, listRect.width - 20f, contentHeight);
             
-            Widgets.BeginScrollView(listRect, ref billScrollPosition, viewRect);
+            CorvusStyle.BeginStyledScrollView(listRect, ref billScrollPosition, viewRect);
             
             var curY = 0f;
             foreach (var billInfo in relevantBills)
@@ -723,7 +866,7 @@ namespace CorvusProductionUI
                 curY += itemHeight;
             }
             
-            Widgets.EndScrollView();
+            CorvusStyle.EndStyledScrollView();
         }
 
         private List<BillInfo> GetRelevantBills()
@@ -780,72 +923,47 @@ namespace CorvusProductionUI
 
         private void DrawBillItem(Rect rect, BillInfo billInfo)
         {
-            // Background
-            if (Mouse.IsOver(rect))
-            {
-                Widgets.DrawHighlight(rect);
-            }
-            Widgets.DrawBox(rect);
+            float hover = GetHoverAmount("bill_" + billInfo.bill.GetHashCode(), Mouse.IsOver(rect));
+            CorvusStyle.DrawListRow(rect, hover);
 
             var bill = billInfo.bill;
             var workbench = billInfo.workbench;
-            var innerRect = rect.ContractedBy(5f);
+            var innerRect = rect.ContractedBy(8f);
+            ThingDef productDef = bill.recipe?.ProducedThingDef ?? bill.recipe?.products?.Select(p => p?.thingDef).FirstOrDefault(t => t != null);
             
-            // Bill name and workbench info
-            var nameRect = new Rect(innerRect.x, innerRect.y, innerRect.width * 0.6f, 20f);
+            float titleX = innerRect.x;
+            if (productDef != null)
+            {
+                var productIconRect = new Rect(innerRect.x, innerRect.y + 1f, 18f, 18f);
+                Widgets.DefIcon(productIconRect, productDef);
+                TooltipHandler.TipRegion(productIconRect, productDef.LabelCap);
+                titleX = productIconRect.xMax + 6f;
+            }
+
+            var nameRect = new Rect(titleX, innerRect.y, innerRect.width - 34f - (titleX - innerRect.x), 20f);
+            GUI.color = CorvusStyle.TextPrimary;
             Widgets.Label(nameRect, bill.LabelCap);
             
-            var workbenchRect = new Rect(innerRect.x, innerRect.y + 22f, innerRect.width * 0.6f, 20f);
-            GUI.color = Color.gray;
-            Widgets.Label(workbenchRect, $"@ {workbench.Label}".Translate());
+            var workbenchRect = new Rect(innerRect.x, innerRect.y + 22f, innerRect.width - 98f, 16f);
+            GUI.color = CorvusStyle.TextSecondary;
+            Text.Font = GameFont.Tiny;
+            Widgets.Label(workbenchRect, "@ " + workbench.LabelCap);
+            Text.Font = GameFont.Small;
             GUI.color = Color.white;
-            
-            // Bill controls (right side)
-            var controlsY = innerRect.y + 45f;
-            
-            // Minus button
-            var minusRect = new Rect(innerRect.x + 10f, controlsY, 25f, 25f);
-            if (Widgets.ButtonText(minusRect, "-".Translate()))
+
+            if (bill.recipe != null)
             {
-                ModifyBillCount(bill, -1);
+                var billInputIconsRect = new Rect(innerRect.xMax - 92f, innerRect.y + 22f, 70f, 16f);
+                DrawIngredientIcons(bill.recipe, billInputIconsRect.x, billInputIconsRect.y, billInputIconsRect.width);
             }
-            
-            // Count display/edit
-            var countRect = new Rect(minusRect.xMax + 5f, controlsY, 50f, 25f);
-            string countText = GetBillCountText(bill);
-            var newCountText = Widgets.TextField(countRect, countText);
-            if (newCountText != countText && int.TryParse(newCountText, out int newCount) && newCount > 0)
+
+            var deleteRect = new Rect(innerRect.xMax - 24f, innerRect.y + 2f, 20f, 20f);
+            if (Mouse.IsOver(deleteRect))
             {
-                SetBillCount(bill, newCount);
+                GUI.color = new Color(CorvusStyle.Danger.r, CorvusStyle.Danger.g, CorvusStyle.Danger.b, 0.12f);
+                GUI.DrawTexture(deleteRect.ExpandedBy(2f), BaseContent.WhiteTex);
+                GUI.color = Color.white;
             }
-            
-            // Plus button
-            var plusRect = new Rect(countRect.xMax + 5f, controlsY, 25f, 25f);
-            if (Widgets.ButtonText(plusRect, "+".Translate()))
-            {
-                ModifyBillCount(bill, 1);
-            }
-            
-            // Repeat mode button
-            var modeRect = new Rect(plusRect.xMax + 10f, controlsY, 50f, 25f);
-            var modeText = GetBillModeText(bill);
-            if (Widgets.ButtonText(modeRect, modeText))
-            {
-                ShowBillModeMenu(bill);
-            }
-            
-            // Details button
-            var detailsRect = new Rect(modeRect.xMax + 10f, controlsY, 60f, 25f);
-            if (Widgets.ButtonText(detailsRect, "BillDetails".Translate()))
-            {
-                if (bill is Bill_Production productionBill)
-                {
-                    Find.WindowStack.Add(new Dialog_BillConfig(productionBill, workbench.Position));
-                }
-            }
-            
-            // Delete button (trash icon)
-            var deleteRect = new Rect(innerRect.xMax - 25f, innerRect.y + 5f, 20f, 20f);
             if (Widgets.ButtonImage(deleteRect, TexButton.Delete))
             {
                 if (workbench is IBillGiver billGiver)
@@ -854,6 +972,55 @@ namespace CorvusProductionUI
                     Messages.Message($"Deleted bill: {bill.LabelCap}", MessageTypeDefOf.NeutralEvent);
                 }
             }
+            TooltipHandler.TipRegion(deleteRect, "TooltipDeleteBill".Translate());
+
+            var dividerRect = new Rect(innerRect.x, innerRect.y + 45f, innerRect.width, 1f);
+            CorvusStyle.DrawSeparator(dividerRect);
+            
+            var controlsY = innerRect.y + 54f;
+            
+            var minusRect = new Rect(innerRect.x + 4f, controlsY, 24f, 24f);
+            if (CorvusStyle.DrawIconButton(minusRect, "-", GetHoverAmount("bill_minus_" + bill.GetHashCode(), Mouse.IsOver(minusRect))))
+            {
+                ModifyBillCount(bill, -1);
+            }
+            TooltipHandler.TipRegion(minusRect, "Decrease bill count");
+            
+            var countRect = new Rect(minusRect.xMax + 4f, controlsY, 40f, 24f);
+            CorvusStyle.DrawPanel(countRect, true);
+            string countText = GetBillCountText(bill);
+            var newCountText = Widgets.TextField(countRect, countText);
+            if (newCountText != countText && int.TryParse(newCountText, out int newCount) && newCount > 0)
+            {
+                SetBillCount(bill, newCount);
+            }
+            
+            var plusRect = new Rect(countRect.xMax + 4f, controlsY, 24f, 24f);
+            if (CorvusStyle.DrawIconButton(plusRect, "+", GetHoverAmount("bill_plus_" + bill.GetHashCode(), Mouse.IsOver(plusRect))))
+            {
+                ModifyBillCount(bill, 1);
+            }
+            TooltipHandler.TipRegion(plusRect, "Increase bill count");
+            
+            var modeRect = new Rect(plusRect.xMax + 8f, controlsY, 46f, 24f);
+            var modeText = GetBillModeText(bill);
+            float modeHover = GetHoverAmount("bill_mode_" + bill.GetHashCode(), Mouse.IsOver(modeRect));
+            CorvusStyle.DrawChip(modeRect, modeText, modeHover, bill is Bill_Production prodBill && prodBill.repeatMode == BillRepeatModeDefOf.Forever);
+            if (Widgets.ButtonInvisible(modeRect))
+            {
+                ShowBillModeMenu(bill);
+            }
+            TooltipHandler.TipRegion(modeRect, "Change repeat mode");
+            
+            var detailsRect = new Rect(modeRect.xMax + 8f, controlsY, 34f, 24f);
+            if (CorvusStyle.DrawSmallButton(detailsRect, "CFG", GetHoverAmount("bill_details_" + bill.GetHashCode(), Mouse.IsOver(detailsRect))))
+            {
+                if (bill is Bill_Production productionBill)
+                {
+                    Find.WindowStack.Add(new Dialog_BillConfig(productionBill, workbench.Position));
+                }
+            }
+            TooltipHandler.TipRegion(detailsRect, "TooltipBillDetails".Translate());
         }
 
         private string GetBillCountText(Bill bill)
@@ -925,6 +1092,19 @@ namespace CorvusProductionUI
                 })
             };
             Find.WindowStack.Add(new FloatMenu(options));
+        }
+
+        private float GetHoverAmount(string elementId, bool isHovered)
+        {
+            if (!hoverStates.TryGetValue(elementId, out float current))
+            {
+                current = 0f;
+            }
+
+            float target = isHovered ? 1f : 0f;
+            current = Mathf.MoveTowards(current, target, Time.deltaTime * 8f);
+            hoverStates[elementId] = current;
+            return current;
         }
     }
 

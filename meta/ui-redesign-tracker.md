@@ -19,7 +19,7 @@ Design direction:
 
 Implementation:
 
-- not started
+- Phase 1 complete
 
 ## Current Decisions
 
@@ -46,17 +46,18 @@ Not chosen yet:
 
 Status:
 
-- pending
+- complete
 
 Tasks:
 
-- create `Source/CorvusProductionUI/CorvusStyle.cs`
-- define base colors
-- define panel fill and border helpers
-- define separator helpers
-- define compact button drawing helpers
-- define row hover drawing helpers
-- add custom window background rendering to `ProductionWindow`
+- create `Source/CorvusProductionUI/CorvusStyle.cs` [done]
+- define base colors [done]
+- define panel fill and border helpers [done]
+- define separator helpers [done]
+- define compact button drawing helpers [done]
+- define row hover drawing helpers [done]
+- add custom window background rendering to `ProductionWindow` [done]
+- review and tune Phase 1 visuals in-game [done]
 
 Exit criteria:
 
@@ -67,15 +68,16 @@ Exit criteria:
 
 Status:
 
-- pending
+- in progress
 
 Tasks:
 
-- replace bulky `Add Bill` row action with a compact action button
-- standardize row action button sizes
-- standardize hover behavior across controls
-- add tooltips where icon-only controls are introduced
-- reduce visual weight of secondary actions
+- replace bulky `Add Bill` row action with a compact action button [done]
+- standardize row action button sizes [done]
+- standardize hover behavior across controls [done]
+- add tooltips where icon-only controls are introduced [done]
+- reduce visual weight of secondary actions [done]
+- review and tune compact controls in-game [pending]
 
 Exit criteria:
 
@@ -86,15 +88,16 @@ Exit criteria:
 
 Status:
 
-- pending
+- in progress
 
 Tasks:
 
-- refine filter bar grouping and spacing
-- improve left/right pane hierarchy
-- improve recipe row information hierarchy
-- improve bill row anatomy
-- reduce boxy/form-like presentation
+- refine filter bar grouping and spacing [done]
+- improve left/right pane hierarchy [done]
+- improve recipe row information hierarchy [done]
+- improve bill row anatomy [done]
+- reduce boxy/form-like presentation [done]
+- review and tune Phase 3 layout in-game [pending]
 
 Exit criteria:
 
@@ -105,14 +108,15 @@ Exit criteria:
 
 Status:
 
-- pending
+- in progress
 
 Tasks:
 
-- tune motion and hover response
-- add subtle surface finish if needed
-- refine badges/status chips
-- evaluate optional logo/header treatment
+- tune motion and hover response [done]
+- add subtle surface finish if needed [done]
+- refine badges/status chips [done]
+- evaluate optional logo/header treatment [done]
+- review and tune Phase 4 polish in-game [pending]
 
 Exit criteria:
 
@@ -146,3 +150,13 @@ If resuming later:
 - created implementation tracker
 - confirmed redesign direction is desirable
 - agreed to prioritize a quiet industrial command aesthetic over vanilla mimicry
+- implemented initial `CorvusStyle` helper
+- applied initial Corvus visual layer to `ProductionWindow`
+- confirmed successful Debug build
+- confirmed in-game that Phase 1 loads correctly and the visual change is immediate
+- implemented compact control language for recipe and bill rows
+- confirmed successful Debug build after Phase 2 changes
+- implemented layout refinement pass for filters, pane balance, and row hierarchy
+- confirmed successful Debug build after Phase 3 changes
+- implemented polish pass with surface finish, header branding, and clearer state badges
+- confirmed successful Debug build after Phase 4 changes
